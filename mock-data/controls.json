@@ -1,0 +1,92 @@
+[
+  {
+    "name": "MFA - Administrative Accounts",
+    "control_type": "MFA",
+    "description": "Multi-factor authentication enforced for all administrative and privileged accounts.",
+    "implementation_cost_inr": 200000,
+    "annual_maintenance_inr": 50000,
+    "max_risk_reduction": 0.25,
+    "implementation_time_days": 14
+  },
+  {
+    "name": "MFA - All Employees",
+    "control_type": "MFA",
+    "description": "MFA enforced for all employee accounts across all systems.",
+    "implementation_cost_inr": 500000,
+    "annual_maintenance_inr": 100000,
+    "max_risk_reduction": 0.30,
+    "implementation_time_days": 30
+  },
+  {
+    "name": "EDR - Workstations",
+    "control_type": "EDR",
+    "description": "Endpoint Detection & Response deployed on all employee workstations.",
+    "implementation_cost_inr": 800000,
+    "annual_maintenance_inr": 200000,
+    "max_risk_reduction": 0.20,
+    "implementation_time_days": 21
+  },
+  {
+    "name": "EDR - Servers",
+    "control_type": "EDR",
+    "description": "EDR deployed on all production servers.",
+    "implementation_cost_inr": 1200000,
+    "annual_maintenance_inr": 300000,
+    "max_risk_reduction": 0.22,
+    "implementation_time_days": 21
+  },
+  {
+    "name": "Critical Patch Management",
+    "control_type": "PATCH",
+    "description": "Automated patching for critical and high-severity vulnerabilities within 48 hours.",
+    "implementation_cost_inr": 300000,
+    "annual_maintenance_inr": 80000,
+    "max_risk_reduction": 0.35,
+    "implementation_time_days": 14
+  },
+  {
+    "name": "Network Segmentation",
+    "control_type": "SEGMENTATION",
+    "description": "Micro-segmentation of production network with zero-trust policies.",
+    "implementation_cost_inr": 1500000,
+    "annual_maintenance_inr": 200000,
+    "max_risk_reduction": 0.25,
+    "implementation_time_days": 60
+  },
+  {
+    "name": "Backup Encryption & Immutability",
+    "control_type": "BACKUP",
+    "description": "Encrypted, immutable backups with 3-2-1 strategy and regular restore testing.",
+    "implementation_cost_inr": 400000,
+    "annual_maintenance_inr": 100000,
+    "max_risk_reduction": 0.15,
+    "implementation_time_days": 21
+  },
+  {
+    "name": "Web Application Firewall",
+    "control_type": "FIREWALL",
+    "description": "WAF deployed in front of all public-facing web applications.",
+    "implementation_cost_inr": 600000,
+    "annual_maintenance_inr": 150000,
+    "max_risk_reduction": 0.18,
+    "implementation_time_days": 14
+  },
+  {
+    "name": "SIEM Enhancement",
+    "control_type": "SIEM",
+    "description": "Enhanced SIEM with custom detection rules, 24/7 monitoring, and automated alerts.",
+    "implementation_cost_inr": 1000000,
+    "annual_maintenance_inr": 250000,
+    "max_risk_reduction": 0.12,
+    "implementation_time_days": 30
+  },
+  {
+    "name": "DLP - Email & Cloud Storage",
+    "control_type": "DLP",
+    "description": "Data Loss Prevention for email and cloud storage to prevent data exfiltration.",
+    "implementation_cost_inr": 700000,
+    "annual_maintenance_inr": 180000,
+    "max_risk_reduction": 0.10,
+    "implementation_time_days": 30
+  }
+]
