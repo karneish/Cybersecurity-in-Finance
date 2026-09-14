@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    name: Frontend build (TS + Vite)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Type-check + build
+        run: npm run build
+      - name: Unit tests (Vitest)
+        run: npm run test
+
+  python:
+    name: Python compileall
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile shared common package
+        run: python -m compileall services/common/cybercommon
+      - name: Compile risk-engine
+        run: python -m compileall services/risk-engine
+      - name: Compile investment-optimizer
+        run: python -m compileall services/investment-optimizer
+      - name: Compile ai-service
+        run: python -m compileall services/ai-service
+      - name: Compile api-gateway
+        run: python -m compileall services/api-gateway
+      - name: Compile auth-service
+        run: python -m compileall services/auth-service
+      - name: Compile asset-service
+        run: python -m compileall services/asset-service
+      - name: Compile vulnerability-service
+        run: python -m compileall services/vulnerability-service
+      - name: Compile control-service
+        run: python -m compileall services/control-service
+      - name: Compile ingestion-service
+        run: python -m compileall services/ingestion-service
+      - name: Compile notification-service
+        run: python -m compileall services/notification-service
+      - name: Compile database tooling
+        run: python -m compileall database
+
+  python-tests:
+    name: Backend unit tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install test dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest numpy
+          pip install -e ./services/common
+      - name: Test cybercommon (JWT + security)
+        run: python -m pytest services/common/tests -q
+      - name: Test risk-engine formulas + audit chain
+        run: python -m pytest services/risk-engine/tests -q
+      - name: Test investment-optimizer
+        run: python -m pytest services/investment-optimizer/tests -q
+      - name: Test ai-service RAG
+        run: python -m pytest services/ai-service/tests -q
