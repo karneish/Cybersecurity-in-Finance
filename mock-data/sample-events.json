@@ -1,0 +1,59 @@
+[
+  {
+    "event_type": "VULNERABILITY_DETECTED",
+    "asset_id": "PAY-SRV-001",
+    "source": "NESSUS",
+    "details": {
+      "cve_id": "CVE-2026-1001",
+      "cvss": 9.8,
+      "title": "SQL Injection in Payment API Endpoint",
+      "severity": "CRITICAL"
+    },
+    "timestamp": "2026-08-25T08:00:00Z"
+  },
+  {
+    "event_type": "VULNERABILITY_DETECTED",
+    "asset_id": "CLOUD-MGMT-001",
+    "source": "GITLEAKS",
+    "details": {
+      "cve_id": "CVE-2026-1002",
+      "cvss": 9.1,
+      "title": "Hardcoded Credentials in Cloud Management CLI",
+      "severity": "CRITICAL"
+    },
+    "timestamp": "2026-08-25T08:05:00Z"
+  },
+  {
+    "event_type": "CONTROL_STATUS_CHANGED",
+    "asset_id": "AUTH-IDP-001",
+    "source": "MANUAL",
+    "details": {
+      "control_type": "MFA",
+      "status": "DISABLED",
+      "previous_status": "ACTIVE"
+    },
+    "timestamp": "2026-08-25T08:10:00Z"
+  },
+  {
+    "event_type": "VULNERABILITY_DETECTED",
+    "asset_id": "WEB-APP-001",
+    "source": "BURP_SUITE",
+    "details": {
+      "cve_id": "CVE-2026-1003",
+      "cvss": 8.6,
+      "title": "Path Traversal in Customer Portal File Upload",
+      "severity": "CRITICAL"
+    },
+    "timestamp": "2026-08-25T08:15:00Z"
+  },
+  {
+    "event_type": "VULNERABILITY_REMEDIATED",
+    "asset_id": "EMAIL-SRV-001",
+    "source": "MANUAL",
+    "details": {
+      "cve_id": "CVE-2026-1010",
+      "title": "Privilege Escalation via Email Server"
+    },
+    "timestamp": "2026-08-25T08:20:00Z"
+  }
+]
