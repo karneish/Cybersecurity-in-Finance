@@ -1,0 +1,283 @@
+services:
+  # ─── Infrastructure ───────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - cyberrisk-net
+
+  # ─── Backend: Python Services ─────────────────────
+  api-gateway:
+    build:
+      context: ./services
+      dockerfile: api-gateway/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=redis://redis:6379
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - ASSET_SERVICE_URL=http://asset-service:8082
+      - VULN_SERVICE_URL=http://vulnerability-service:8083
+      - CONTROL_SERVICE_URL=http://control-service:8084
+      - INGESTION_SERVICE_URL=http://ingestion-service:8085
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8086
+      - RISK_ENGINE_URL=http://risk-engine:8090
+      - INVESTMENT_URL=http://investment-optimizer:8091
+      - AI_SERVICE_URL=http://ai-service:8092
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8080"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cyberrisk-net
+
+  auth-service:
+    build:
+      context: ./services
+      dockerfile: auth-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRY=${JWT_EXPIRY:-900000}
+      - JWT_REFRESH_EXPIRY=${JWT_REFRESH_EXPIRY:-604800000}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8081"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cyberrisk-net
+
+  asset-service:
+    build:
+      context: ./services
+      dockerfile: asset-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8082"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cyberrisk-net
+
+  vulnerability-service:
+    build:
+      context: ./services
+      dockerfile: vulnerability-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8083"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cyberrisk-net
+
+  control-service:
+    build:
+      context: ./services
+      dockerfile: control-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8084"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cyberrisk-net
+
+  ingestion-service:
+    build:
+      context: ./services
+      dockerfile: ingestion-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+      - RISK_ENGINE_URL=http://risk-engine:8090
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8085"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cyberrisk-net
+
+  notification-service:
+    build:
+      context: ./services
+      dockerfile: notification-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8086"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cyberrisk-net
+
+  risk-engine:
+    build:
+      context: ./services
+      dockerfile: risk-engine/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+      - ASSET_SERVICE_URL=http://asset-service:8082
+      - VULN_SERVICE_URL=http://vulnerability-service:8083
+      - CONTROL_SERVICE_URL=http://control-service:8084
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8090"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cyberrisk-net
+
+  investment-optimizer:
+    build:
+      context: ./services
+      dockerfile: investment-optimizer/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8091:8091"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+      - RISK_ENGINE_URL=http://risk-engine:8090
+      - CONTROL_SERVICE_URL=http://control-service:8084
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8091"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cyberrisk-net
+
+  ai-service:
+    build:
+      context: ./services
+      dockerfile: ai-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8092:8092"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+      - RISK_ENGINE_URL=http://risk-engine:8090
+      - ASSET_SERVICE_URL=http://asset-service:8082
+      - INVESTMENT_URL=http://investment-optimizer:8091
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - USE_MOCK_LLM=${USE_MOCK_LLM:-true}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8092"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cyberrisk-net
+
+  # ─── Frontend ─────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_WS_URL: ws://localhost:3000/ws/
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway
+    networks:
+      - cyberrisk-net
+
+volumes:
+  redis_data:
+
+networks:
+  cyberrisk-net:
+    driver: bridge
