@@ -1,0 +1,27 @@
+# Enforce LF line endings for all text files
+* text=auto eol=lf
+
+# Explicitly declare text files
+*.py text diff=python
+*.js text diff=javascript
+*.ts text diff=typescript
+*.tsx text diff=typescript
+*.json text
+*.yml text
+*.yaml text
+*.toml text
+*.md text diff=markdown
+*.html text diff=html
+*.css text diff=css
+*.sh text eol=lf
+*.ps1 text eol=crlf
+
+# Binary files (do not diff)
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
