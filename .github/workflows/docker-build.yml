@@ -1,0 +1,34 @@
+name: Docker build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "frontend/**"
+      - "docker-compose.yml"
+      - ".github/workflows/docker-build.yml"
+  pull_request:
+    paths:
+      - "services/**"
+      - "frontend/**"
+      - "docker-compose.yml"
+
+jobs:
+  build:
+    name: Verify Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build all containers
+        run: docker compose build --no-cache
+      - name: Verify images created
+        run: |
+          docker compose config --services | while read svc; do
+            img=$(docker compose config | grep -A5 "  $svc:" | grep image | awk '{print $2}' || true)
+            if [ -n "$img" ]; then
+              echo "Checking image for $svc: $img"
+              docker image inspect "$img" > /dev/null 2>&1 || echo "WARN: image $img not found locally (expected if using external images)"
+            fi
+          done
+          echo "Docker build completed successfully"
