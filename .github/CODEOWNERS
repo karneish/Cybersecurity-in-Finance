@@ -1,0 +1,7 @@
+# Default code owners — any PR touching these paths
+*                       @karneish
+services/               @karneish
+frontend/               @karneish
+database/               @karneish
+scripts/                @karneish
+.github/workflows/      @karneish
