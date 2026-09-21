@@ -59,14 +59,14 @@ export default function SectorRiskChart() {
         name: 'Expected Annual Loss',
         type: 'bar',
         data: sorted.map((s) => s.expected_annual_loss),
-        itemStyle: { color: '#4f46e5', borderRadius: [4, 4, 0, 0] },
+        itemStyle: { color: '#243B6B', borderRadius: [4, 4, 0, 0] },
         barMaxWidth: 48,
       },
     ],
   }
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="sector-risk">
       <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
         <BarChart3 className="h-4 w-4 text-text-secondary" />
         Sector Risk Exposure
