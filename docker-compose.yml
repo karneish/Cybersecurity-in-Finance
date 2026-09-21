@@ -15,6 +15,26 @@ services:
     networks:
       - cyberrisk-net
 
+  # "db-init" runs migrations + seeds once and exits (replacement for the
+  # old NeonDB manual migration step; idempotent — safe on every `up`).
+  db-init:
+    image: python:3.11-slim
+    restart: "no"
+    working_dir: /repo
+    volumes:
+      - .:/repo:ro
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - PYTHONUNBUFFERED=1
+    command: >
+      sh -c "python -m pip install --quiet --no-cache-dir 'psycopg2-binary>=2.9.10' &&
+             python database/migrate_and_seed.py"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cyberrisk-net
+
   # ─── Backend: Python Services ─────────────────────
   api-gateway:
     build:
@@ -60,6 +80,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRY=${JWT_EXPIRY:-900000}
       - JWT_REFRESH_EXPIRY=${JWT_REFRESH_EXPIRY:-604800000}
+      - AUTH_ALLOW_REGISTER=${AUTH_ALLOW_REGISTER:-false}
     healthcheck:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8081"]
       interval: 15s
@@ -69,6 +90,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     networks:
       - cyberrisk-net
 
@@ -82,6 +105,7 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
     healthcheck:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8082"]
       interval: 15s
@@ -91,6 +115,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     networks:
       - cyberrisk-net
 
@@ -104,6 +130,7 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
     healthcheck:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8083"]
       interval: 15s
@@ -113,6 +140,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     networks:
       - cyberrisk-net
 
@@ -126,6 +155,7 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
     healthcheck:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8084"]
       interval: 15s
@@ -135,6 +165,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     networks:
       - cyberrisk-net
 
@@ -149,6 +181,7 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://redis:6379
       - RISK_ENGINE_URL=http://risk-engine:8090
+      - JWT_SECRET=${JWT_SECRET}
     healthcheck:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8085"]
       interval: 15s
@@ -158,6 +191,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     networks:
       - cyberrisk-net
 
@@ -170,6 +205,8 @@ services:
       - "8086:8086"
     environment:
       - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
     healthcheck:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8086"]
       interval: 15s
@@ -195,6 +232,7 @@ services:
       - ASSET_SERVICE_URL=http://asset-service:8082
       - VULN_SERVICE_URL=http://vulnerability-service:8083
       - CONTROL_SERVICE_URL=http://control-service:8084
+      - JWT_SECRET=${JWT_SECRET}
     healthcheck:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8090"]
       interval: 15s
@@ -204,6 +242,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     networks:
       - cyberrisk-net
 
@@ -219,6 +259,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - RISK_ENGINE_URL=http://risk-engine:8090
       - CONTROL_SERVICE_URL=http://control-service:8084
+      - JWT_SECRET=${JWT_SECRET}
     healthcheck:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8091"]
       interval: 15s
@@ -228,6 +269,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     networks:
       - cyberrisk-net
 
@@ -247,6 +290,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - USE_MOCK_LLM=${USE_MOCK_LLM:-true}
       - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+      - JWT_SECRET=${JWT_SECRET}
     healthcheck:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8092"]
       interval: 15s
@@ -256,6 +300,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     networks:
       - cyberrisk-net
 
@@ -266,7 +312,8 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: /api
-        VITE_WS_URL: ws://localhost:3000/ws/
+        # Empty → frontend derives the WebSocket broker URL from the page origin.
+        VITE_WS_URL: ""
     restart: unless-stopped
     ports:
       - "3000:3000"
