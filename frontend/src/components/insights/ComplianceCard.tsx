@@ -32,7 +32,7 @@ export default function ComplianceCard() {
   if (!compliance) return null
 
   return (
-    <div className="cyber-card relative p-6">
+    <div className="cyber-card relative p-6" data-tour="compliance-mapping">
       <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
         <Scale className="h-4 w-4 text-status-info" />
         Compliance Control Mapping
