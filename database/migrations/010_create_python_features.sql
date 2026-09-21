@@ -35,7 +35,14 @@ CREATE INDEX IF NOT EXISTS idx_security_events_asset ON public.security_events(s
 CREATE INDEX IF NOT EXISTS idx_security_events_ts ON public.security_events(timestamp DESC);
 
 -- ─── RAG compliance corpus ───────────────────────────────────
-CREATE EXTENSION IF NOT EXISTS vector;
+-- embeddings are stored as JSONB for portability; try to enable pgvector
+-- where available but never let its absence abort the migration.
+DO $$
+BEGIN
+    CREATE EXTENSION IF NOT EXISTS vector;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'pgvector extension unavailable; embeddings retained as JSONB';
+END $$;
 
 CREATE TABLE IF NOT EXISTS gov.compliance_docs (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
