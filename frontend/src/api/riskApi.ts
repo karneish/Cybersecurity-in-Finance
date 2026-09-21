@@ -28,6 +28,15 @@ export const riskApi = {
   getEAL: (includeVar = false) =>
     apiClient.get<EALResult>(`/risk/eal?include_var=${includeVar}`),
 
+  getBusinessUnits: (sortBy = 'eal') =>
+    apiClient.get('/risk/business-units', { params: { sort_by: sortBy } }),
+
+  exportReport: (section: 'full' | 'eal' | 'compliance' | 'business-units' | 'trends' = 'full') =>
+    apiClient.get(`/risk/report/export?section=${section}`),
+
+  getAlertEvents: (limit = 20) =>
+    apiClient.get('/alerts/events', { params: { limit } }),
+
   getDrivers: (limit = 10) => apiClient.get(`/risk/drivers?limit=${limit}`),
 
   getTrends: (days = 30) => apiClient.get<RiskTrend>(`/risk/trends?days=${days}`),
@@ -60,6 +69,9 @@ export const riskApi = {
 
   getForecast: (horizonMonths = 12) =>
     apiClient.get(`/risk/forecast?horizon_months=${horizonMonths}`),
+
+  getMLForecast: (horizonMonths = 12) =>
+    apiClient.get(`/risk/forecast/ml?horizon_months=${horizonMonths}`),
 
   createSnapshot: () => apiClient.post('/risk/snapshot'),
 
