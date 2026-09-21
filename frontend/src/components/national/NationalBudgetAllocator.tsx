@@ -26,7 +26,7 @@ export default function NationalBudgetAllocator() {
   }
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="national-budget">
       <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
         <Wallet className="h-4 w-4 text-status-low" />
         National Budget Allocator
