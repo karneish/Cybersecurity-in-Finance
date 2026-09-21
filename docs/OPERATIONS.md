@@ -35,7 +35,7 @@ docker compose logs api-gateway
 
 ### Frontend blank page after rebuild
 
-`VITE_WS_URL` is a build-time env var. Rebuild after changing it:
+`VITE_WS_URL` is a build-time override; the default is empty, which makes the client derive the broker URL `ws(s)://<host>/ws` from the page origin. Rebuild after changing it:
 ```bash
 docker compose build frontend
 docker compose up -d frontend
