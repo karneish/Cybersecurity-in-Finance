@@ -60,7 +60,7 @@ export default function FinancialExposureChart() {
   }
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="financial-exposure">
       <div className="mb-4 flex items-center gap-2">
         <IndianRupee className="h-5 w-5 text-status-info" />
         <h3 className="text-sm font-semibold text-text-primary">Financial Exposure by Department</h3>
