@@ -41,7 +41,7 @@ export default function RiskMatrix({ assets }: RiskMatrixProps) {
   })
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="risk-matrix">
       <h3 className="mb-4 text-sm font-semibold text-text-primary">Risk Matrix (Likelihood × Impact)</h3>
       <div className="overflow-x-auto">
         <table className="border-collapse">
