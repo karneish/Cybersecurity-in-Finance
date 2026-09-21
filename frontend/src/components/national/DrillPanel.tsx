@@ -94,7 +94,7 @@ export default function DrillPanel() {
     'cyber-input w-full appearance-none bg-bg-elevated text-text-primary'
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="cyber-drill">
       <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
         <Target className="h-4 w-4 text-accent-primary" />
         National Cyber Exercise
