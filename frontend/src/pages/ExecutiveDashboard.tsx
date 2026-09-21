@@ -14,10 +14,12 @@ import DataQualityCard from '@/components/insights/DataQualityCard'
 import LossDistributionCard from '@/components/insights/LossDistributionCard'
 import ComplianceCard from '@/components/insights/ComplianceCard'
 import AuditChainPanel from '@/components/insights/AuditChainPanel'
+import AlertsFeed from '@/components/insights/AlertsFeed'
 import ImpactCompositionChart from '@/components/dashboard/ImpactCompositionChart'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 import { useEffect, useState } from 'react'
-import { ShieldAlert, Siren, TrendingUp } from 'lucide-react'
+import { ShieldAlert, Siren, TrendingUp, Download } from 'lucide-react'
+import { downloadBlob, downloadJson } from '@/utils/exportCsv'
 
 const BUDGET_TOTAL = 10000000
 
@@ -40,6 +42,23 @@ export default function ExecutiveDashboard() {
   const [allocated, setAllocated] = useState(0)
   const [var95, setVar95] = useState<number | null>(null)
   const [forecastEal, setForecastEal] = useState<number | null>(null)
+  const [exporting, setExporting] = useState<string | null>(null)
+
+  const handleExport = async (section: 'eal' | 'business-units' | 'compliance' | 'trends' | 'full') => {
+    setExporting(section)
+    try {
+      const res = await riskApi.exportReport(section)
+      if (section === 'full') {
+        downloadJson(res.data as Record<string, unknown>, `scro-risk-report-${new Date().toISOString().slice(0, 10)}.json`)
+      } else {
+        downloadBlob(res.data as string, `scro-${section}-${new Date().toISOString().slice(0, 10)}.csv`)
+      }
+    } catch {
+      // silent: export is best-effort
+    } finally {
+      setExporting(null)
+    }
+  }
 
   useEffect(() => {
     investmentApi
@@ -82,13 +101,35 @@ export default function ExecutiveDashboard() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-text-primary">Executive Dashboard</h1>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <RiskScoreCard score={enterpriseRisk?.enterprise_risk_score ?? 0} previousScore={moM(trends?.risk_scores)} />
-        <EALCard eal={eal?.total_eal ?? 0} previousEal={moM(trends?.eal_values)} />
-        <BudgetCard allocated={allocated} total={BUDGET_TOTAL} />
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-text-secondary">Export:</span>
+        {(['eal', 'business-units', 'compliance', 'trends', 'full'] as const).map((section) => (
+          <button
+            key={section}
+            type="button"
+            onClick={() => handleExport(section)}
+            disabled={exporting !== null}
+            className="inline-flex items-center gap-1.5 rounded-md border border-line-default bg-surface-card px-3 py-1.5 text-xs font-medium text-text-primary transition hover:border-accent-primary hover:text-accent-primary disabled:opacity-50"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {section === 'full' ? 'JSON Report' : `${section} CSV`}
+          </button>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div data-tour="risk-score">
+          <RiskScoreCard score={enterpriseRisk?.enterprise_risk_score ?? 0} previousScore={moM(trends?.risk_scores)} />
+        </div>
+        <div data-tour="eal">
+          <EALCard eal={eal?.total_eal ?? 0} previousEal={moM(trends?.eal_values)} />
+        </div>
+        <div data-tour="budget">
+          <BudgetCard allocated={allocated} total={BUDGET_TOTAL} />
+        </div>
+      </div>
+
+      <div data-tour="kpi" className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <KpiTile
           icon={Siren}
           label="VaR95 (Monte-Carlo)"
@@ -120,35 +161,53 @@ export default function ExecutiveDashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2" data-tour="top-risk-drivers">
           <TopRiskCard drivers={enterpriseRisk?.top_risk_drivers ?? []} />
         </div>
-        <div className="cyber-card p-6">
+        <div className="cyber-card p-6" data-tour="vuln-distribution">
           <h3 className="mb-2 text-sm font-semibold text-text-primary">Vulnerability Distribution</h3>
           <VulnerabilityPieChart />
         </div>
       </div>
 
-      <RiskTrendChart data={trends} />
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <ImpactCompositionChart />
-        </div>
-        <DataQualityCard />
+      <div data-tour="risk-trend">
+        <RiskTrendChart data={trends} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <LossDistributionCard />
-        <ComplianceCard />
+        <div className="lg:col-span-2" data-tour="impact-composition">
+          <ImpactCompositionChart />
+        </div>
+        <div data-tour="data-quality">
+          <DataQualityCard />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div data-tour="loss-distribution">
+          <LossDistributionCard />
+        </div>
+        <div data-tour="compliance">
+          <ComplianceCard />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <RecentEventsFeed />
-        <FinancialExposureChart />
+        <div data-tour="recent-events">
+          <RecentEventsFeed />
+        </div>
+        <div data-tour="financial-exposure">
+          <FinancialExposureChart />
+        </div>
       </div>
 
-      <AuditChainPanel />
+      <div data-tour="alerts-feed">
+        <AlertsFeed />
+      </div>
+
+      <div data-tour="audit-chain">
+        <AuditChainPanel />
+      </div>
     </div>
   )
 }
