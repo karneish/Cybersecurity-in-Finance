@@ -14,7 +14,7 @@ export default function RiskBreakdownTree({ drivers }: RiskBreakdownTreeProps) {
   }
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="risk-breakdown">
       <div className="mb-4 flex items-center gap-2">
         <GitBranch className="h-5 w-5 text-accent-primary" />
         <h3 className="text-sm font-semibold text-text-primary">Risk Breakdown</h3>
