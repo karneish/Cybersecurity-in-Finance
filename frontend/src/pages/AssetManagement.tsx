@@ -138,7 +138,7 @@ export default function AssetManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-tour="asset-header">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Asset Management</h1>
           <p className="text-sm text-text-tertiary">{total} assets total</p>
@@ -149,7 +149,7 @@ export default function AssetManagement() {
         </button>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center" data-tour="asset-filters">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
           <input
@@ -178,7 +178,7 @@ export default function AssetManagement() {
         </select>
       </div>
 
-      <div className="cyber-card">
+      <div className="cyber-card" data-tour="asset-table">
         <DataTable
           columns={columns}
           data={filtered as unknown as Record<string, unknown>[]}
