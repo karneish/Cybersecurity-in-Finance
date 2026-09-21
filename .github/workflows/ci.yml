@@ -71,13 +71,21 @@ jobs:
       - name: Install test dependencies
         run: |
           pip install --upgrade pip
-          pip install pytest numpy
+          pip install pytest numpy httpx
           pip install -e ./services/common
       - name: Test cybercommon (JWT + security)
         run: python -m pytest services/common/tests -q
+      - name: Test api-gateway proxy + observability
+        run: python -m pytest services/api-gateway/tests -q
+      - name: Test vulnerability-service threat-intel parsers
+        run: python -m pytest services/vulnerability-service/tests -q
       - name: Test risk-engine formulas + audit chain
         run: python -m pytest services/risk-engine/tests -q
+      - name: Test control-service effectiveness signals
+        run: python -m pytest services/control-service/tests -q
+      - name: Test notification-service alert engine + STOMP bridge
+        run: python -m pytest services/notification-service/tests -q
       - name: Test investment-optimizer
         run: python -m pytest services/investment-optimizer/tests -q
-      - name: Test ai-service RAG
+      - name: Test ai-service RAG + OpenAI integration path
         run: python -m pytest services/ai-service/tests -q
