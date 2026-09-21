@@ -1,4 +1,4 @@
-.PHONY: help build up down restart logs migrate seed test lint typecheck smoke clean
+.PHONY: help build up down restart logs migrate seed test lint typecheck smoke slim clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -23,8 +23,10 @@ migrate: ## Run database migrations + seed data
 
 seed: migrate ## Alias for migrate
 
-test: ## Run backend + frontend tests
-	python -m pytest services/common/tests services/risk-engine/tests services/investment-optimizer/tests services/ai-service/tests -q
+test: ## Run backend + frontend tests (each suite separately to avoid conftest path collisions)
+	for suite in services/common/tests services/api-gateway/tests services/risk-engine/tests services/investment-optimizer/tests services/ai-service/tests services/vulnerability-service/tests services/control-service/tests services/notification-service/tests; do \
+		python -m pytest $${suite} -q || exit 1; \
+	done
 	cd frontend && npm test
 
 lint: ## Lint backend (ruff) + frontend (eslint)
@@ -36,6 +38,9 @@ typecheck: ## Type-check backend (mypy) + frontend (tsc)
 
 smoke: ## Run smoke test (Docker stack must be running)
 	powershell -ExecutionPolicy Bypass -File scripts/smoke_sacro.ps1
+
+slim: ## Reclaim Docker disk (build cache + dangling images only; nothing from other projects)
+	powershell -ExecutionPolicy Bypass -File scripts/slim_docker.ps1
 
 clean: ## Remove __pycache__, .pytest_cache, node_modules
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
