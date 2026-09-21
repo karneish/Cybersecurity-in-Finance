@@ -40,7 +40,7 @@ export default function DataQualityCard() {
         endAngle: -30,
         min: 0,
         max: 100,
-        progress: { show: true, width: 14, itemStyle: { color: quality.confidence_percent >= 70 ? '#22C55E' : quality.confidence_percent >= 50 ? '#F59E0B' : '#F43F5E' } },
+        progress: { show: true, width: 14, itemStyle: { color: quality.confidence_percent >= 70 ? '#2F7D52' : quality.confidence_percent >= 50 ? '#A67D1E' : '#B8393F' } },
         axisLine: { lineStyle: { width: 14, color: [[1, '#1B222D']] } },
         axisTick: { show: false },
         splitLine: { show: false },
