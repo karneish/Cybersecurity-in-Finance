@@ -89,14 +89,14 @@ export default function AIAssistant() {
 
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col cyber-card">
-      <div className="border-b border-border-subtle px-6 py-4">
+      <div className="border-b border-border-subtle px-6 py-4" data-tour="ai-header">
         <div className="flex items-center gap-2">
           <Bot className="h-5 w-5 text-accent-primary" />
           <h2 className="text-sm font-semibold text-text-primary">AI Security Assistant</h2>
         </div>
       </div>
 
-      <div ref={listRef} className="flex-1 overflow-y-auto px-6 py-4">
+      <div ref={listRef} className="flex-1 overflow-y-auto px-6 py-4" data-tour="chat-thread">
         <div className="space-y-4">
           {messages.map((msg) => (
             <div
@@ -151,7 +151,7 @@ export default function AIAssistant() {
         </div>
       </div>
 
-      <div className="border-t border-border-subtle px-6 py-3">
+      <div className="border-t border-border-subtle px-6 py-3" data-tour="chat-composer">
         <div className="mb-2 flex flex-wrap gap-2">
           {QUICK_ACTIONS.map((action) => (
             <button
