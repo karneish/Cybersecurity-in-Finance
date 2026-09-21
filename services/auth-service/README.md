@@ -27,8 +27,10 @@ rotation, user management, and audit logging.
 
 ## Demo users
 
+Only the three SCRO demo accounts are seeded and active (public registration is disabled by default).
+
 | Username | Password | Role |
 |---|---|---|
-| admin | admin123 | ADMIN |
-| ciso | admin123 | CISO |
-| analyst | admin123 | ANALYST |
+| scro_regulator | Scro@2026! | CISO |
+| scro_banker | Scro@2026! | ANALYST |
+| scro_auditor | Scro@2026! | ANALYST |

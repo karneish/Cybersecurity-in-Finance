@@ -12,6 +12,7 @@ from cybercommon.logging_setup import setup_json_logging
 setup_json_logging(service="notification-service")
 from app.core.stomp import start_bridge
 from app.routes.ws_routes import router as ws_router
+from app.routes.alerts_routes import router as alerts_router
 
 bridge_thread = None
 
@@ -43,6 +44,7 @@ app.add_middleware(
 )
 
 app.include_router(ws_router)
+app.include_router(alerts_router)
 
 
 @app.get("/health")

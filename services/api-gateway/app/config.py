@@ -17,6 +17,15 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = int(os.getenv("PORT", "8080"))
 
+    cors_origins: list[str] = [
+        o.strip()
+        for o in os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:3000,http://127.0.0.1:3000",
+        ).split(",")
+        if o.strip()
+    ]
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

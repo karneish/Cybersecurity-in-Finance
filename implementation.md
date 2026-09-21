@@ -2,7 +2,7 @@
 
 > Problem Statement 26105 — AI-Powered Continuous Cyber Risk Quantification
 > and Investment Optimization Platform
-> Date: 2026-09-05 | Status: APPROVED — ready to build
+> Date: 2026-09-05 | Status: BUILD COMPLETE — 116 backend tests green + 48 frontend Vitest green; full-stack smoke `scripts/smoke_sacro.ps1` 12/12 PASS (2026-09-20)
 
 ## 1. Background
 
@@ -37,10 +37,10 @@ This keeps it implementable both in this project and in real life.
 
 ## 4. Environment / Prerequisites
 
-- [ ] Create local `.env` (gitignored) with: DATABASE_URL, DB_USER, DB_PASSWORD
-      (reuse values from docker-compose.yml; .env.example is the template)
-- [ ] NeonDB: reuse EXISTING instance (no new link needed) unless old link is dead
-- [ ] Node 18+ (frontend), Python 3.12 (services), JDK 21 (Java services), Docker
+- [x] Create local `.env` (gitignored) with: DATABASE_URL, DB_USER, DB_PASSWORD
+      (done — Phase E5; .env.example is the template)
+- [x] NeonDB decision — local Postgres (`cyberrisk`) in use; NeonDB switch deferred until deployment
+- [x] Node 18+ (frontend), Python 3.11/3.12 (services), Docker (JDK n/a after Java→Python migration)
 
 ## 5. Key Design Decisions (locked)
 
@@ -194,7 +194,7 @@ behavior); live EAL is always computed by RiskCalculator (same as /score, /eal).
 - [x] G5. Gateway features: JWT filter, Redis rate limiting (per-IP + per-user), per-service circuit breaker, excluded paths.
 - [x] G6. Risk-engine (Python): XGBoost ML forecast at `/api/risk/forecast/ml` (weekly-seeded snapshots feed supervised training).
 - [x] G7. ai-service RAG compliance: pgvector-backed corpus (ISO 27001, NIST CSF, CIS, RBI, SEBI, DPDP, TRAI, IRDAI, NCIIPC) + `/api/ai/rag/*`.
-- [x] G8. Notification-service switched from SockJS/Spring STOMP to native WebSocket STOMP broker (`/ws`); frontend `useWebSocket.ts` now uses `brokerURL` + `VITE_WS_URL=ws://localhost:8086/ws`.
+- [x] G8. Notification-service switched from SockJS/Spring STOMP to native WebSocket STOMP broker (`/ws`); frontend `useWebSocket.ts` uses `brokerURL` derived from the page origin (empty `VITE_WS_URL`).
 - [x] G9. Delete Java sources + Maven poms; CI Java job removed; docker-compose 100% Python (build context `./services`, common installed first).
 
 ### PHASE F — Verification & Demo
@@ -206,11 +206,20 @@ behavior); live EAL is always computed by RiskCalculator (same as /score, /eal).
       /risk/compliance/{sector} → POST /risk/exercises (drill) → /investment/national/optimize →
       /risk/tprm/cascade/{id} → /risk/audit/verify → WebSocket alive
       (match real auth API: login resp field `token`, register body `fullName`)
-- [ ] F4. Manual demo run — both personas:
-      1. Ministry oversight: national EAL + SRI, sector heatmap, run RANSOMWARE drill
-      2. Regulator: per-agency RBI/DPDP gaps, vendor cascade for a bank, audit verify, report
-      3. National budget: allocate ₹X Cr across sectors → national EAL reduction + ROSI
+- [x] F4. Manual demo run — both personas *(executed 2026-09-19 against the live stack, fully covered by
+       smoke_sacro.ps1 12/12 + README §20a)*:
+      1. Ministry oversight: national EAL ₹6,520 Cr + SRI 0.70, sector heatmap, RANSOMWARE drill (+54% surge)
+      2. Regulator: per-agency RBI/DPDP compliance (BANKING → 6 RBI requirements), vendor cascade
+         (₹15,863 Cr exposure / 4 direct assets), audit verify INTACT, AI summary (mock-LLM)
+      3. National budget: ₹5 Cr → ₹1.54 Cr allocated across 3 sectors / 22 controls → −67.5% EAL, ROSI ≈ +285,000%
 - [x] F5. Update TODO.md with new completed items + overall status
+
+### PHASE H — Delivery close-out (2026-09-19)
+- [x] H1. WS6 extras: OR-Tools **CP-SAT** knapsack in `optimizer.py` (`_maximize_mode`, `optimize_national`); `delay_remediation` scenario + `delay_analysis` block in `scenario_engine.py`; business-unit rollup `EALCalculator.business_units()` + `GET /api/risk/business-units`; `tests/test_cp_knapsack.py` (6) + `tests/test_delay_scenario.py` (6)
+- [x] H2. WS7 — downloadable reports: `GET /api/risk/report/export?section=eal|compliance|business-units|trends|full` (CSV via `_csv_download`); `frontend/src/utils/exportCsv.ts` (+tests); export buttons on `ExecutiveDashboard`
+- [x] H3. WS8 — alert engine: migration `012_create_alert_system.sql` (`alert_rules` + `alert_events`, 4 seeded rules); `cybercommon.models.AlertRule/AlertEvent`; notification-service `core/alerts.py` + `routes/alerts_routes.py`; STOMP auto-eval on `risk.events.updated` + broadcast on `risk.events.alert → /topic/risk/alert`; gateway route `/api/alerts`; `AlertsFeed.tsx` on ExecutiveDashboard
+- [x] H4. Test expansion: ai-service **OpenAI path** test (`tests/test_openai_integration.py`) + notification-service **STOMP bridge** tests (`tests/test_stomp_bridge.py`) → 116 backend tests total
+- [x] H5. Infrastructure + docs: `db-init` migration/seed container in `docker-compose.yml` (13th service); `README.md` §16 route table rewritten to match `App.tsx`; WS broker-URL docs fixed (empty `VITE_WS_URL`); `.env.example`, `frontend/README.md`, `docs/{OPERATIONS,DEPLOYMENT,SECURITY_HARDENING}.md`, `SUPPORT.md` updated
 
 ## 10. Definition of Done
 - All Phase A-F checkboxes ticked and verified

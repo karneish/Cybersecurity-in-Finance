@@ -25,11 +25,16 @@ class SovereignTwin:
         self.db = db
         self.risk_calc = RiskCalculator(db)
         self.quality = DataQualityEngine(db)
+        self._risk_cache: dict[str, dict] = {}
+        self._coverage_cache: dict[str, float] = {}
+        self._confidence_cache: dict[str, float] = {}
 
-    # ── low-level helpers ──────────────────────────────────────────────
+    # ── low-level helpers (memoized per request) ───────────────────────
     def _risk(self, asset_id: str) -> dict:
-        risk = self.risk_calc.calculate_asset_risk(asset_id)
-        return risk or {}
+        if asset_id not in self._risk_cache:
+            risk = self.risk_calc.calculate_asset_risk(asset_id)
+            self._risk_cache[asset_id] = risk or {}
+        return self._risk_cache[asset_id]
 
     def _control_types(self) -> list[str]:
         rows = self.db.query(SecurityControl.control_type).distinct().all()
@@ -46,15 +51,19 @@ class SovereignTwin:
         )
 
     def _control_coverage(self, asset_id: str, total_types: int) -> float:
-        if total_types == 0:
-            return 0.0
-        return self._active_control_count(asset_id) / total_types
+        if asset_id not in self._coverage_cache:
+            if total_types == 0:
+                self._coverage_cache[asset_id] = 0.0
+            else:
+                self._coverage_cache[asset_id] = self._active_control_count(asset_id) / total_types
+        return self._coverage_cache[asset_id]
 
     def _data_confidence(self, asset_id: str) -> float:
-        quality = self.quality.asset_quality(asset_id)
-        if "error" in quality:
-            return 0.0
-        return float(quality.get("confidence_percent", 0) or 0)
+        if asset_id not in self._confidence_cache:
+            quality = self.quality.asset_quality(asset_id)
+            value = 0.0 if "error" in quality else float(quality.get("confidence_percent", 0) or 0)
+            self._confidence_cache[asset_id] = value
+        return self._confidence_cache[asset_id]
 
     def _sector_assets(self, sector: str) -> list[Asset]:
         return (

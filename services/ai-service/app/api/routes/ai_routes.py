@@ -2,6 +2,9 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from cybercommon.deps import require_roles
+from cybercommon.internal import service_headers
+
 from app.config import settings
 from app.schemas.ai_schemas import (
     RecommendRequest, RecommendResponse,
@@ -19,17 +22,22 @@ from app.core.intent_router import classify_intent, INTENT_LABELS
 
 router = APIRouter(prefix="/api/ai", tags=["AI"])
 
+AI_ROLES = {"dependencies": [Depends(require_roles("ANALYST", "CISO", "ADMIN"))]}
+
 
 async def _fetch_json(url: str) -> dict:
     async with httpx.AsyncClient(timeout=12.0) as client:
-        resp = await client.get(url)
+        resp = await client.get(url, headers=service_headers("ai-service"))
         return resp.json()
 
 
 async def _fetch_risk_data() -> dict:
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            resp = await client.get(f"{settings.risk_engine_url}/api/risk/score")
+            resp = await client.get(
+                f"{settings.risk_engine_url}/api/risk/score",
+                headers=service_headers("ai-service"),
+            )
             return resp.json()
         except Exception:
             return {"total_eal": 0, "enterprise_risk_score": 0, "top_risk_drivers": []}
@@ -38,7 +46,10 @@ async def _fetch_risk_data() -> dict:
 async def _fetch_eal_data() -> dict:
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            resp = await client.get(f"{settings.risk_engine_url}/api/risk/eal")
+            resp = await client.get(
+                f"{settings.risk_engine_url}/api/risk/eal",
+                headers=service_headers("ai-service"),
+            )
             return resp.json()
         except Exception:
             return {"total_eal": 0, "asset_eals": [], "breakdown_by_department": {}}
@@ -47,13 +58,19 @@ async def _fetch_eal_data() -> dict:
 async def _fetch_asset_risk(asset_id: str) -> tuple[dict, dict]:
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            risk_resp = await client.get(f"{settings.risk_engine_url}/api/risk/asset/{asset_id}")
+            risk_resp = await client.get(
+                f"{settings.risk_engine_url}/api/risk/asset/{asset_id}",
+                headers=service_headers("ai-service"),
+            )
             risk_data = risk_resp.json()
         except Exception:
             risk_data = {"risk_score": 0, "probability": 0}
 
         try:
-            asset_resp = await client.get(f"{settings.asset_service_url}/api/assets/{asset_id}")
+            asset_resp = await client.get(
+                f"{settings.asset_service_url}/api/assets/{asset_id}",
+                headers=service_headers("ai-service"),
+            )
             asset_data = asset_resp.json()
         except Exception:
             asset_data = {"id": asset_id, "name": "Unknown Asset"}
@@ -108,14 +125,14 @@ async def _route_data(intent: str) -> dict:
     }
 
 
-@router.post("/recommend", response_model=RecommendResponse)
+@router.post("/recommend", response_model=RecommendResponse, **AI_ROLES)
 async def recommend(request: RecommendRequest):
     risk_data = await _fetch_risk_data()
     result = await get_recommendations(risk_data, request.context, request.focus_area)
     return result
 
 
-@router.post("/query", response_model=QueryResponse)
+@router.post("/query", response_model=QueryResponse, **AI_ROLES)
 async def query(request: QueryRequest):
     intent = classify_intent(request.question)
     routed = await _route_data(intent)
@@ -128,14 +145,14 @@ async def query(request: QueryRequest):
     return result
 
 
-@router.post("/explain/risk/{asset_id}", response_model=ExplainResponse)
+@router.post("/explain/risk/{asset_id}", response_model=ExplainResponse, **AI_ROLES)
 async def explain(request: ExplainRequest, asset_id: str):
     asset_data, risk_data = await _fetch_asset_risk(asset_id)
     result = await explain_risk(asset_data, risk_data, request.detail_level)
     return result
 
 
-@router.post("/summarize")
+@router.post("/summarize", **AI_ROLES)
 async def summarize(request: SummarizeRequest):
     risk_data = await _fetch_risk_data()
     eal_data = await _fetch_eal_data()

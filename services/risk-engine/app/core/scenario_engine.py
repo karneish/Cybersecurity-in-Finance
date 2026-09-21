@@ -32,7 +32,7 @@ class ScenarioSimulator:
 
         summary = self._build_summary(changes, current_eal, simulated_eal, eal_reduction, reduction_pct)
 
-        return {
+        result = {
             "current_eal": round(current_eal, 2),
             "simulated_eal": round(simulated_eal, 2),
             "eal_reduction": round(eal_reduction, 2),
@@ -42,6 +42,36 @@ class ScenarioSimulator:
             "risk_score_change": round(current_score - simulated_score, 2),
             "asset_changes": asset_changes,
             "summary": summary,
+        }
+
+        if simulated_state.get("delays"):
+            result["delay_analysis"] = self._delay_analysis(simulated_state, simulated_eal)
+
+        return result
+
+    def _delay_analysis(self, state: dict, escalated_eal: float) -> dict:
+        """Cost of delaying remediation: compare against the same state without escalation."""
+        no_delay = {
+            **state,
+            "delays": [
+                {
+                    "asset_id": d.get("asset_id"),
+                    "escalation": 1.0,
+                    "days": d.get("days", 0),
+                    "vuln_ids": d.get("vuln_ids"),
+                }
+                for d in state["delays"]
+            ],
+        }
+        eal_without_delay, _, _ = self._calculate_simulated(no_delay)
+        return {
+            "additional_annualized_loss_inr": round(max(escalated_eal - eal_without_delay, 0), 2),
+            "exploitation_window_cost_inr": round(max(escalated_eal - eal_without_delay, 0) * 0.5, 2),
+            "delayed_assets": sorted({d.get("asset_id") for d in state["delays"] if d.get("asset_id")}),
+            "note": (
+                "Probability of exploitation within the open window is scaled up while "
+                "remediation is deferred (attacker dwell-time leverage)."
+            ),
         }
 
     def _build_simulated_state(self, changes: list[dict]) -> dict:
@@ -78,6 +108,17 @@ class ScenarioSimulator:
                 value = change.get("value")
                 if asset_id and field:
                     state["modified_assets"].setdefault(asset_id, {})[field] = value
+
+            elif ctype == "delay_remediation":
+                days = float(change.get("days", 90))
+                # Widened attacker window → probability escalation, capped at +40%.
+                escalation = 1 + min(0.40, max(0.0, days) / 365.0 * 0.40)
+                state.setdefault("delays", []).append({
+                    "asset_id": change.get("asset_id"),
+                    "vuln_ids": change.get("vuln_ids"),
+                    "days": days,
+                    "escalation": escalation,
+                })
 
         return state
 
@@ -149,6 +190,11 @@ class ScenarioSimulator:
                     "internet_exposed": v.internet_exposed,
                 }
                 prob = calculate_probability(v_data, asset_data, control_reduction)
+                for delay in state.get("delays", []):
+                    asset_matches = delay["asset_id"] is None or delay["asset_id"] == asset_id
+                    vuln_scope = not delay.get("vuln_ids") or str(v.id) in delay["vuln_ids"]
+                    if asset_matches and vuln_scope:
+                        prob = min(0.99, prob * delay["escalation"])
                 probabilities.append(prob)
                 asset_eal += prob * financial_impact
 
@@ -175,12 +221,18 @@ class ScenarioSimulator:
     def _build_summary(self, changes, current_eal, simulated_eal, reduction, pct) -> str:
         control_count = len([c for c in changes if c.get("type") == "add_control"])
         vuln_count = len([c for c in changes if c.get("type") == "remediate_vuln"])
+        delay_count = len([c for c in changes if c.get("type") == "delay_remediation"])
 
         lines = [f"Simulated {len(changes)} changes:"]
         if control_count:
             lines.append(f"  - Added {control_count} security control(s)")
         if vuln_count:
             lines.append(f"  - Remediated {vuln_count} vulnerability(ies)")
+        if delay_count:
+            lines.append(
+                f"  - Delayed remediation (open exploit window widened); "
+                f"see delay_analysis for the annualized cost of delay"
+            )
         lines.append(f"  - Current EAL: ₹{current_eal:,.0f}")
         lines.append(f"  - Simulated EAL: ₹{simulated_eal:,.0f}")
         lines.append(f"  - Reduction: ₹{reduction:,.0f} ({pct:.1f}%)")

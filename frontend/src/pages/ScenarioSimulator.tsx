@@ -129,7 +129,7 @@ export default function ScenarioSimulator() {
       <h1 className="text-2xl font-bold text-text-primary">Scenario Simulator</h1>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="cyber-card p-6">
+        <div className="cyber-card p-6" data-tour="current-state">
           <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-status-info/15 text-xs font-bold text-status-info">
               1
@@ -160,7 +160,7 @@ export default function ScenarioSimulator() {
         </div>
 
         <div className="space-y-4">
-          <div className="cyber-card p-6">
+          <div className="cyber-card p-6" data-tour="build-changes">
             <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
               <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-primary/15 text-xs font-bold text-accent-primary">
                 2
@@ -278,7 +278,7 @@ export default function ScenarioSimulator() {
           </div>
         </div>
 
-        <div className="cyber-card p-6">
+        <div className="cyber-card p-6" data-tour="simulated-state">
           <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-status-low/15 text-xs font-bold text-status-low">
               3

@@ -30,9 +30,9 @@ describe('scoreRingColor', () => {
 
 describe('scoreHex', () => {
   it('maps bands to the correct hex colours', () => {
-    expect(scoreHex(81)).toBe('#F43F5E')
-    expect(scoreHex(62)).toBe('#F97316')
-    expect(scoreHex(44)).toBe('#F59E0B')
-    expect(scoreHex(12)).toBe('#22C55E')
+    expect(scoreHex(81)).toBe('#B8393F')
+    expect(scoreHex(62)).toBe('#C05A1F')
+    expect(scoreHex(44)).toBe('#A67D1E')
+    expect(scoreHex(12)).toBe('#2F7D52')
   })
 })

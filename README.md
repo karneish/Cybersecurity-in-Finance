@@ -30,11 +30,12 @@ Built 100% on open, no-vendor-lock-in technology: every service is **Python (Fas
 18. [Setup & running](#18-setup--running)
 19. [Demo users](#19-demo-users)
 20. [Smoke test](#20-smoke-test)
-21. [CI / CD](#21-ci--cd)
-22. [Budget — what it actually costs to build this today](#22-budget--what-it-actually-costs-to-build-this-today)
-23. [Planned next steps (Phase 2/3)](#23-planned-next-steps-phase-23)
-24. [Maintenance & operations](#24-maintenance--operations)
-25. [Appendix A — file-by-file service notes](#25-appendix-a--file-by-file-service-notes)
+21. [Demo walkthrough (15 min)](#20a-demo-walkthrough-15-minute-script)
+22. [CI / CD](#21-ci--cd)
+23. [Budget — what it actually costs to build this today](#22-budget--what-it-actually-costs-to-build-this-today)
+24. [Planned next steps (Phase 2/3)](#23-planned-next-steps-phase-23)
+25. [Maintenance & operations](#24-maintenance--operations)
+26. [Appendix A — file-by-file service notes](#25-appendix-a--file-by-file-service-notes)
 
 ---
 
@@ -96,7 +97,7 @@ Cyber risk is usually measured once a year with spreadsheets. This system makes 
 - `POST /api/ai/rag/query` → most relevant clauses + scores + a plain-English answer; `GET /api/ai/rag/status`; `POST /api/ai/rag/refresh`.
 
 ### 3.4 Identity & access (auth-service)
-- Login / register / **JWT access token** + **refresh token with rotation** (SHA-256 hashed, family-tracked, reuse-detection revokes the whole family).
+- Login / register (disabled by default — only the 3 seeded SCRO demo accounts) / **JWT access token** + **refresh token with rotation** (SHA-256 hashed, family-tracked, reuse-detection revokes the whole family).
 - Roles: **ADMIN, CISO, ANALYST**. Role update & user delete (admin only). `GET /api/auth/me`, audit logging of logins/registers/role changes.
 
 ### 3.5 Gateway (api-gateway)
@@ -154,7 +155,7 @@ Cyber risk is usually measured once a year with spreadsheets. This system makes 
 | Storage | PostgreSQL (one schema per domain) + Redis (pub/sub, rate limits, connector state) | Relational integrity + realtime |
 | Realtime | Native WebSocket + STOMP 1.2 | Industry-standard push over plain WS |
 | LLM | OpenAI (optional) + offline mock mode | Zero-cost default, upgradable |
-| Containers | Docker + Docker Compose (12 containers) + nginx | Reproducible one-command stack |
+| Containers | Docker + Docker Compose (13 services incl. `db-init` init) + nginx | Reproducible one-command stack |
 | CI | GitHub Actions | Frontend build + Python compileall |
 
 ---
@@ -247,7 +248,7 @@ Cyber risk is usually measured once a year with spreadsheets. This system makes 
 │       ├── 009_create_data_sources.sql
 │       └── 010_create_python_features.sql       # refresh_tokens, security_events,
 │                                                #   pgvector, compliance_docs
-├── docker-compose.yml           # 12-container, 100% Python stack
+├── docker-compose.yml           # 13-service, 100% Python stack
 ├── mock-data/                   # fixtures used by migrate_and_seed.py
 │   ├── assets.json              # 12 assets
 │   ├── vulnerabilities.json     # 15 vulnerabilities
@@ -313,7 +314,7 @@ Every service exposes `GET /health`; the gateway also exposes `/actuator/health`
 | Migration | Schema | Tables | Purpose |
 |---|---|---|---|
 | `init.sql` | all core | — | creates schemas |
-| 001 | auth | `users`, `audit_logs` | identity + audit trail; seeds admin/ciso/analyst |
+| 001 | auth | `users`, `audit_logs` | identity + audit trail; seeds 3 SCRO demo users |
 | 002 | asset | `assets`, `asset_dependencies` | inventory (business value ₹, criticality 0–100, exposure, sensitivity) + dependency graph |
 | 003 | vuln | `vulnerabilities` | CVSS, CWE, severity, exploitability, remediation, source, status |
 | 004 | control | `security_controls`, `asset_controls` | control catalogue (cost, max risk reduction, time) + per-asset coverage/effectiveness/maturity |
@@ -469,12 +470,13 @@ Endpoint: `POST /api/ai/rag/query` → `{ "clauses": [ { "framework", "clause", 
 ## 13. Live notifications (WebSocket / STOMP)
 
 - Plain **WebSocket** (not SockJS) at **`ws://host:8086/ws`**, speaking **STOMP 1.2**.
-- Broker publishes two topics:
+- Broker publishes three topics:
   - **`/topic/risk/updated`** — fired after every risk recalculation (drill, scenario, control change, snapshot).
   - **`/topic/ingestion/event`** — every new ingested security event (live connectors, simulators, replay).
-- **Bridge:** a background thread in `notification-service` subscribes to Redis channels (`risk.events.updated`, `ingestion.events.realtime`) and forwards each message to the STOMP broker.
+  - **`/topic/risk/alert`** — threshold alerts fired by the alert-rule engine (WS8).
+- **Bridge:** a background thread in `notification-service` subscribes to Redis channels (`risk.events.updated`, `risk.events.alert`, `ingestion.events.realtime`) and forwards each message to the STOMP broker.
 - Heartbeat keep-alives (client `0,0` = never) — used by the frontend `useWebSocket.ts` hook.
-- Frontend `VITE_WS_URL=ws://localhost:8086/ws`; when behind nginx the `upgrade`/`connection` headers are forwarded to `notification-service:8086`.
+- Frontend derives the broker URL from the page origin (`ws(s)://<host>/ws`, proxied by nginx/Vite to `notification-service:8086`). Set `VITE_WS_URL` at build time only to override.
 
 ---
 
@@ -664,26 +666,27 @@ React 18 + TS SPA served by nginx at **:3000**. 11 pages, 40+ components, 8 type
 
 ### 16.1 Routes / pages
 
+Real SPA routes (`frontend/src/App.tsx` + `frontend/src/config/roles.ts`). Role hierarchy `ADMIN > CISO > ANALYST > VIEWER`; `minRole` = most-privileged tier that can view. Server-side RBAC mirrors this at every API.
+
 | Route | Page | Who sees it |
 |---|---|---|
 | `/login` | Login | everyone |
-| `/dashboard` | Executive dashboard — EAL trend, risk bands, critical assets, quick actions | analyst+ |
-| `/risk-landscape` | Risk register, per-asset drill-down, scenario & loss-distribution tools | analyst+ |
-| `/forecast` | Do-nothing + ML forecast charts | analyst+ |
-| `/compliance` | ISO/NIST/RBI gap matrix + triggerable RAG queries | ciso+ |
-| `/controls` | Control catalogue, effectiveness, coverage; budget optimizer | ciso+ |
-| `/vulnerabilities` | Vuln backlog, prioritisation, findings | analyst+ |
-| `/assets` | Asset inventory, criticality, dependency graph | analyst+ |
-| `/invest` | Investment page — optimization curve, plans, leaderboard | ciso+ |
-| `/national` | **SCRO National Observatory** — Oversight & Regulatory personas | admin (gateway-enforced) |
-| `/notifications` | Live WS event feed | analyst+ |
-| `/docs` | OpenAPI ↔ frontend cross-reference helper | everyone |
+| `/` | **Executive dashboard** — risk score, EAL + VaR95, budget allocation, charts, live events, **AlertsFeed** | VIEWER+ |
+| `/security` | **Security dashboard** — control/image posture, activity | ANALYST+ |
+| `/assets` | Asset inventory, criticality, dependency graph | ANALYST+ |
+| `/risk` | Risk analysis — register, per-asset drill-down, loss distribution, compliance mapping | VIEWER+ |
+| `/vulnerabilities` | Vuln backlog, threat-intel enrichment (KEV/EPSS), prioritisation | ANALYST+ |
+| `/simulator` | What-if scenario & delay-remediation simulator | ANALYST+ |
+| `/investment` | Investment optimizer — CP-SAT budgets, curve, national allocation | CISO+ |
+| `/national` | **SCRO National Observatory** — sectors, regions, exercises, TPRM, reports | CISO+ |
+| `/ai` | AI assistant (RAG on compliance corpus) | ANALYST+ |
+| `/settings` | Settings — WS connection state, env display | ADMIN |
 
 ### 16.2 Key components & hooks
-- `useAuth` (JWT + refresh rotation client), `useWebSocket` (STOMP brokerURL, zero heartbeats, reconnect, per-topic subscriptions).
-- Dashboard widgets: EAL gauge, band donut, 12-month trend, top assets, AI insight card.
+- `useAuth` (JWT + refresh rotation client), `useWebSocket` (STOMP brokerURL derived from origin, zero heartbeats, reconnect, per-topic subscriptions on `/topic/risk/updated`, `/topic/ingestion/event`, `/topic/risk/alert`).
+- Dashboard widgets: EAL gauge, band donut, 12-month trend, VaR95, AlertsFeed, AI insight card.
 - National Observatory: national summary, sector/pie + bars, region heatmap (ECharts `world` map), agency breakdown, drill launcher (WORM/RANSOMWARE/SUPPLY_CHAIN/DDOS), budget allocator, regulator report panel with **audit-chain verify badge**.
-- `api/*.ts` typed clients: `auth.ts, assets.ts, vulnerabilities.ts, controls.ts, ingestion.ts, risk.ts, investment.ts, ai.ts, notifications.ts`.
+- `api/*.ts` typed clients: `auth.ts, assets.ts, vulnerabilities.ts, controls.ts, ingestion.ts, risk.ts, investment.ts, ai.ts, notifications.ts` (+ `riskApi.ts` for forecasts/export/alerts).
 
 ### 16.3 Proxying
 
@@ -723,7 +726,7 @@ Copied from `.env.example` — defaults are safe for local `docker compose up`.
 # 1. (optional) configure
 copy .env.example .env
 
-# 2. build & start the whole stack (12 containers)
+# 2. build & start the whole stack (13 services — `db-init` runs migrations + seeds once and exits)
 docker compose up --build
 
 # 3. migrate + seed (idempotent; can be re-run any time)
@@ -736,36 +739,62 @@ Then:
 - **Frontend:** http://localhost:3000 (login: see §19)
 - **Gateway docs:** http://localhost:8080/docs
 - **Per-service Swagger:** http://localhost:<port>/docs (ports in §7)
-- **Live WebSocket:** `ws://localhost:8086/ws`
+- **Live WebSocket:** `ws(s)://<host>/ws` (same-origin via nginx; direct broker at `ws://localhost:8086/ws`)
 
 **Local (no Docker) alternative:** run Postgres + Redis, set `DATABASE_URL`/`REDIS_URL`, then `pip install -e services/common/cybercommon` and `uvicorn` each `services/*/app/main.py` on its port.
+
+**Reclaiming Docker disk / RAM:** `make slim` (or `powershell -ExecutionPolicy Bypass -File scripts/slim_docker.ps1`) prunes the BuildKit build cache and dangling images only — no volumes or tagged images, and nothing that belongs to other projects. To lower Docker's memory reservation, edit `%USERPROFILE%\.wslconfig` (`memory=4GB` suits this stack; it runs in ~1 GB), then `wsl --shutdown` and reopen Docker Desktop. When not demoing, `docker compose stop` frees the RAM immediately.
 
 ---
 
 ## 19. Demo users
 
+Only the three SCRO demo accounts are seeded and active — public registration is disabled (`AUTH_ALLOW_REGISTER=false`).
+
 | Username | Password | Role | Notes |
 |---|---|---|---|
-| `admin` | `admin123` | ADMIN | national observatory + user management |
-| `ciso` | `admin123` | CISO | controls, investment, compliance |
-| `analyst` | `admin123` | ANALYST | assets, vulnerabilities, risk |
-| `scro_regulator` | `Scro@2026!` | ANALYST | regulator persona (`regulator@scro.gov.in`), registered by `scripts/smoke_sacro.ps1` |
+| `scro_regulator` | `Scro@2026!` | CISO | Regulatory Oversight — national observatory, compliance, investment, exercises |
+| `scro_banker` | `Scro@2026!` | ANALYST | Banking sector operations — assets, vulnerabilities, risk, simulator |
+| `scro_auditor` | `Scro@2026!` | ANALYST | National audit & assurance — risk review and tamper-evident audit chain |
 
 ---
 
 ## 20. Smoke test
 
-`powershell -ExecutionPolicy Bypass -File scripts/smoke_sacro.ps1` runs an end-to-end pass:
+`powershell -ExecutionPolicy Bypass -File scripts/smoke_sacro.ps1` runs an end-to-end pass (requires the full stack up):
 
-1. health checks on every service + gateway;
-2. register `scro_regulator` / verify login for all 4 users (splash creds asserted);
-3. authenticated CRUD probes on assets, vulnerabilities, controls, and ingestion events;
-4. risk-engine: score, EAL, scenario simulate, trends, forecast + **ML forecast**;
-5. gateway: bad-token rejection (401) and happy-path forwarding;
-6. notifications: WebSocket connect + subscribe `/topic/risk/updated`;
-7. price: national summary, sectors, regions, SRI, exercises (WORM run), audit-chain **verify**;
-8. investment: optimize + national allocation;
-9. AI: `/ai/recommend`, intent `/ai/query`, RAG status/refresh/query.
+1. login the seeded regulator persona `scro_regulator` / `Scro@2026!` (CISO) — splash creds asserted;
+2. national summary (EAL, sovereign risk index);
+3. sector compliance mapping (BANKING → RBI IT Framework);
+4. scenario drill run (RANSOMWARE × BANKING) asserting a surge;
+5. national investment optimize (₹ budget → sector allocations, ROSI);
+6. TPRM vendor cascade (+ direct asset count);
+7. audit chain integrity verify;
+8. WebSocket endpoint reachable;
+9. asset + vulnerability + control surface (`/assets` `{data}`, `/vulnerabilities?page&size` `{data,total}`, `/controls`, `/controls/effectiveness`);
+10. ingestion + alerts surface (events, rules, alert events, health-check supported metrics);
+11. insights + simulations (loss-distribution, dependency graph, attack-path, snapshots, data-sources);
+12. scenario simulate + AI recommend/summarize + investment ROSI.
+
+Expected result: `PASSED: 12 FAILED: 0`. The full verify → recalc → live-update chain is additionally covered by the unit suites (risk-engine replay/recalc, alert rules, STOMP bridge, `useWebSocket` hook).
+
+---
+
+## 20a. Demo walkthrough (15-minute script)
+
+Everything below runs against the seeded local stack (`docker compose up -d`), with the dashboard at `http://localhost:3000` and the API at `http://localhost:8080`. Two personas:
+
+| Minute | Persona | Action | Live result (seeded data) |
+|---|---|---|---|
+| 0–2 | **Oversight (CISO)** | Log in as `scro_regulator` / `Scro@2026!`; open National Observatory; read the national EAL and Sovereign Risk Index. | National EAL ≈ **₹6,520 Cr**, SRI **0.70** |
+| 2–4 | Oversight | Open Sector / Region tabs; verify the sector heatmap and regional rankings. | Sector × region EAL roll-ups (live APIs) |
+| 4–6 | Oversight | Open **Cyber Exercises**; run a RANSOMWARE × BANKING national drill. | Baseline → simulated EAL surge **≈ +54%** (₹4,838 Cr → ₹7,430 Cr) |
+| 6–9 | **Regulator (same persona)** | Open **Executive / Regulator report**: RBI IT Framework compliance gap for BANKING; TPRM vendor cascade for the largest vendor. | BANKING mapped to **6 RBI requirements**; vendor cascade exposure ≈ **₹15,863 Cr** over 4 direct assets |
+| 9–11 | Oversight | Open **Investment Optimizer**; national budget ₹5 Cr, 3-year horizon. | Allocates **₹1.54 Cr** across **3 sectors** / **22 controls**; EAL **−67.5%** (₹65.2 Bn → ₹21.2 Bn residual) for **ROSI ≈ +285,000%** |
+| 11–13 | Regulator | Open **Audit Chain**: verify tamper-proof audit trail. | `status=INTACT`, all entries verified |
+| 13–15 | Oversight | Open **AI Assistant**; ask for a national posture summary (mock-LLM mode, ₹0 LLM cost). | Natural-language summary + RAG citation of the legal clause |
+
+Every step is also enforced by `scripts/smoke_sacro.ps1` (12/12). The WebSocket feed updates the dashboard live when an ingestion event or drill recalculation lands.
 
 ---
 

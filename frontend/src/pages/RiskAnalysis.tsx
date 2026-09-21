@@ -72,7 +72,7 @@ export default function RiskAnalysis() {
       <h1 className="text-2xl font-bold text-text-primary">Risk Analysis</h1>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-        <div className="relative flex flex-col items-center justify-center rounded-xl border border-border-default bg-bg-surface p-6 shadow-sm">
+        <div className="relative flex flex-col items-center justify-center rounded-xl border border-border-default bg-bg-surface p-6 shadow-sm" data-tour="risk-score-gauge">
           <svg className="h-44 w-44 -rotate-90">
             <circle cx="88" cy="88" r="80" fill="none" stroke="var(--border-subtle)" strokeWidth="10" />
             <circle
@@ -114,7 +114,7 @@ export default function RiskAnalysis() {
 
       <DataSourcesPanel />
 
-      <div className="cyber-card">
+      <div className="cyber-card" data-tour="assets-by-eal">
         <div className="border-b border-border-default px-6 py-4">
           <h3 className="text-sm font-semibold text-text-primary">All Assets by EAL</h3>
         </div>

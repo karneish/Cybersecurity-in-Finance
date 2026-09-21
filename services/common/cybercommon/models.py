@@ -226,3 +226,56 @@ class ComplianceDocument(Base):
     reference = Column(String(255))
     embedding = Column(JSONB)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class ThreatIntel(Base):
+    """Cached threat-intel feed snapshots (migration 011, schema public).
+
+    Stores per-CVE enrichments pulled from CISA KEV, FIRST EPSS and NVD so the
+    platform keeps last-known-good data when the upstream feeds are unreachable
+    (offline fallback). ``payload`` mirrors the upstream record.
+    """
+
+    __tablename__ = "threat_intel"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    feed = Column(String(32), nullable=False)
+    cve_id = Column(String(32), nullable=False)
+    source_key = Column(String(64))
+    payload = Column(JSONB)
+    fetched_at = Column(DateTime, nullable=False, server_default=func.now())
+
+
+class AlertRule(Base):
+    """Threshold alert rule (migration 012, schema public)."""
+
+    __tablename__ = "alert_rules"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(120), nullable=False)
+    metric = Column(String(32), nullable=False)
+    operator = Column(String(4), nullable=False, default=">=")
+    threshold = Column(Numeric(14, 2), nullable=False)
+    asset_id = Column(UUID(as_uuid=True))
+    severity = Column(String(16), nullable=False, default="HIGH")
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class AlertEvent(Base):
+    """Fired alert (migration 012, schema public)."""
+
+    __tablename__ = "alert_events"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rule_id = Column(UUID(as_uuid=True), ForeignKey("public.alert_rules.id"))
+    metric = Column(String(32), nullable=False)
+    observed = Column(Numeric(14, 2), nullable=False)
+    threshold = Column(Numeric(14, 2), nullable=False)
+    severity = Column(String(16), nullable=False)
+    asset_id = Column(UUID(as_uuid=True))
+    payload = Column(JSONB)
+    fired_at = Column(DateTime, nullable=False, server_default=func.now())

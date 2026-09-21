@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
 from cybercommon import jwt as jwt_service
+from cybercommon.deps import gateway_signature
 from cybercommon.redis import redis_client
 
 from app.config import settings
@@ -28,11 +29,13 @@ ROUTES = [
     ("/api/auth", settings.auth_service_url),
     ("/api/assets", settings.asset_service_url),
     ("/api/vulnerabilities", settings.vulnerability_service_url),
+    ("/api/findings", settings.vulnerability_service_url),
     ("/api/controls", settings.control_service_url),
     ("/api/ingestion", settings.ingestion_service_url),
     ("/api/risk", settings.risk_engine_url),
     ("/api/investment", settings.investment_url),
     ("/api/ai", settings.ai_service_url),
+    ("/api/alerts", settings.notification_service_url),
 ]
 
 RATE_LIMIT_PER_IP = int(os.getenv("RATE_LIMIT_PER_IP", "120"))
@@ -48,7 +51,7 @@ _client: httpx.AsyncClient | None = None
 def get_client() -> httpx.AsyncClient:
     global _client
     if _client is None:
-        _client = httpx.AsyncClient(timeout=30.0)
+        _client = httpx.AsyncClient(timeout=float(os.getenv("GATEWAY_TIMEOUT_SEC", "180")))
     return _client
 
 
@@ -64,7 +67,9 @@ def match_route(path: str) -> str | None:
 
 
 def is_excluded(path: str) -> bool:
-    return any(ex in path for ex in EXCLUDED_PATHS)
+    # Exact-path semantics. A naive `ex in path` substring check wrongly
+    # excluded `/api/alerts/health-check` because it contains `/health`.
+    return any(path == ex or path.startswith(ex + "/") for ex in EXCLUDED_PATHS)
 
 
 # ─── circuit breaker ───────────────────────────────────────────
@@ -89,8 +94,9 @@ def circuit_track(host: str, ok: bool) -> None:
     now = time.time()
     key = _cb_key(host)
     if ok:
-        # Closed state: keep a small success marker, clear any staged failures.
-        client.hdel(key + ":fail", "count")
+        # Closed state: clear any staged failures. The counter is an integer
+        # (created via INCR), so it must be deleted, not HDELed.
+        client.delete(key + ":fail")
         return
     failures = client.incr(key + ":fail")
     if failures == 1:
@@ -173,6 +179,9 @@ async def forward(upstream: str, path: str, request: Request, identity: dict | N
     }
     if identity:
         headers.update(identity)
+        headers["X-User-Sig"] = gateway_signature(
+            identity.get("X-User-Id", ""), identity.get("X-User-Roles", "")
+        )
 
     body = await request.body()
     try:

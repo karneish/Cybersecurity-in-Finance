@@ -42,7 +42,7 @@ def _issue_pair(db: Session, user: User, family_id: UUID | None = None) -> tuple
     return access, refresh, ledger
 
 
-def _audit(db: Session, user_id: UUID, action: str, details: str) -> None:
+def _audit(db: Session, user_id: UUID | None, action: str, details: str) -> None:
     db.add(AuditLog(
         user_id=user_id,
         action=action,
@@ -75,8 +75,10 @@ def _response(access: str, refresh: str, user: User) -> LoginResponse:
 def login(db: Session, username: str, password: str) -> LoginResponse:
     user = db.query(User).filter(User.username == username).first()
     if user is None or not verify_password(password, user.password_hash):
+        _audit(db, user.id if user else None, "FAILED_LOGIN", "Invalid username or password")
         raise PermissionError("Invalid username or password")
     if not user.is_active:
+        _audit(db, user.id, "FAILED_LOGIN", "Login blocked — account disabled")
         raise PermissionError("User account is disabled")
 
     access, refresh, _ = _issue_pair(db, user)

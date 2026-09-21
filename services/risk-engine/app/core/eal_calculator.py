@@ -111,6 +111,85 @@ class EALCalculator:
             "value_at_risk_band": mc["value_at_risk_band"],
         }
 
+    def business_units(self, sort_by: str = "eal") -> dict:
+        """Roll up enterprise risk by business unit (department).
+
+        One row per department with its EAL, open vulnerabilities, active
+        controls, average risk score and share of the enterprise EAL.
+        """
+        from app.models.asset import AssetControl
+
+        assets = self.db.query(Asset).all()
+        if not assets:
+            return {"business_units": [], "total_eal": 0.0, "unit_count": 0}
+
+        eal_data = self.calculate_eal()
+        total_eal = eal_data["total_eal"]
+
+        vuln_counts: dict[str, int] = dict(
+            self.db.query(
+                Vulnerability.affected_asset, func.count(Vulnerability.id)
+            )
+            .filter(Vulnerability.status.in_(["OPEN", "IN_PROGRESS"]))
+            .group_by(Vulnerability.affected_asset)
+            .all()
+        ) if eal_data["asset_eals"] else {}
+
+        control_counts: dict[str, int] = dict(
+            self.db.query(AssetControl.asset_id, func.count(AssetControl.id))
+            .filter(AssetControl.status.in_(["IMPLEMENTED", "VERIFIED"]))
+            .group_by(AssetControl.asset_id)
+            .all()
+        ) if eal_data["asset_eals"] else {}
+
+        units: dict[str, dict] = {}
+        for entry in eal_data["asset_eals"]:
+            bu = entry["department"] or "Unassigned"
+            bucket = units.setdefault(bu, {
+                "business_unit": bu,
+                "asset_count": 0,
+                "open_vulns": 0,
+                "active_controls": 0,
+                "total_eal_inr": 0.0,
+                "risk_scores": [],
+                "top_asset": None,
+                "top_asset_eal": 0.0,
+            })
+            bucket["asset_count"] += 1
+            bucket["total_eal_inr"] += entry["eal"]
+            bucket["open_vulns"] += int(vuln_counts.get(entry["asset_id"], 0))
+            bucket["active_controls"] += int(control_counts.get(entry["asset_id"], 0))
+            bucket["risk_scores"].append(entry["risk_score"])
+            if entry["eal"] > bucket["top_asset_eal"]:
+                bucket["top_asset"] = entry["asset_name"]
+                bucket["top_asset_eal"] = entry["eal"]
+
+        rows = []
+        for bucket in units.values():
+            avg_score = sum(bucket["risk_scores"]) / len(bucket["risk_scores"]) if bucket["risk_scores"] else 0
+            rows.append({
+                "business_unit": bucket["business_unit"],
+                "asset_count": bucket["asset_count"],
+                "open_vulns": bucket["open_vulns"],
+                "active_controls": bucket["active_controls"],
+                "total_eal_inr": round(bucket["total_eal_inr"], 2),
+                "average_risk_score": round(avg_score, 2),
+                "share_percent": round(bucket["total_eal_inr"] / total_eal * 100, 2) if total_eal else 0.0,
+                "top_asset": bucket["top_asset"],
+                "risk_band": "CRITICAL" if avg_score >= 75 else "HIGH" if avg_score >= 50 else "MEDIUM" if avg_score >= 25 else "LOW",
+            })
+
+        reverse = sort_by == "eal"
+        rows.sort(key=lambda r: r["total_eal_inr"], reverse=True)
+        if not reverse:
+            rows.sort(key=lambda r: r["average_risk_score"], reverse=True)
+
+        return {
+            "business_units": rows,
+            "total_eal": round(total_eal, 2),
+            "unit_count": len(rows),
+        }
+
     def get_risk_trends(self, days: int = 30) -> dict:
         from datetime import datetime, timedelta
 

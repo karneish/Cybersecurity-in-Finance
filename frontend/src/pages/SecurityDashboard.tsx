@@ -67,25 +67,25 @@ export default function SecurityDashboard() {
   const severityCards: SeverityCount[] = [
     {
       label: 'Critical',
-      count: stats['CRITICAL'] ?? 0,
+      count: stats['critical'] ?? 0,
       color: 'bg-status-critical/10 text-status-critical border-status-critical/30',
       icon: <ShieldX className="h-5 w-5 text-status-critical" />,
     },
     {
       label: 'High',
-      count: stats['HIGH'] ?? 0,
+      count: stats['high'] ?? 0,
       color: 'bg-status-high/10 text-status-high border-status-high/30',
       icon: <ShieldAlert className="h-5 w-5 text-status-high" />,
     },
     {
       label: 'Medium',
-      count: stats['MEDIUM'] ?? 0,
+      count: stats['medium'] ?? 0,
       color: 'bg-status-medium/10 text-status-medium border-status-medium/30',
       icon: <ShieldQuestion className="h-5 w-5 text-status-medium" />,
     },
     {
       label: 'Low',
-      count: stats['LOW'] ?? 0,
+      count: stats['low'] ?? 0,
       color: 'bg-status-low/10 text-status-low border-status-low/30',
       icon: <ShieldCheck className="h-5 w-5 text-status-low" />,
     },
@@ -124,7 +124,7 @@ export default function SecurityDashboard() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-text-primary">Command Center</h1>
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4" data-tour="severity-stats">
         {severityCards.map((card) => (
           <div
             key={card.label}
@@ -146,7 +146,7 @@ export default function SecurityDashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2" data-tour="recent-vulnerabilities">
           <div className="cyber-card">
             <div className="border-b border-border-default px-6 py-4">
               <h3 className="text-sm font-semibold text-text-primary">Recent Vulnerabilities</h3>
@@ -160,11 +160,11 @@ export default function SecurityDashboard() {
           </div>
         </div>
         <div className="space-y-6">
-          <div className="cyber-card p-6">
+          <div className="cyber-card p-6" data-tour="severity-distribution">
             <h3 className="mb-2 text-sm font-semibold text-text-primary">Severity Distribution</h3>
             <VulnerabilityPieChart />
           </div>
-          <div className="cyber-card p-6">
+          <div className="cyber-card p-6" data-tour="control-coverage">
             <h3 className="mb-4 text-sm font-semibold text-text-primary">Control Coverage</h3>
             <div className="mb-3 rounded-lg bg-accent-primary/10 p-3 text-center">
               <p className="text-2xl font-bold text-accent-primary">{coverage.toFixed(0)}%</p>

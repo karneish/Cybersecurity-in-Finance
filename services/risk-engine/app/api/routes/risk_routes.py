@@ -1,11 +1,15 @@
 from datetime import datetime
+import csv
+import io
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from cybercommon.deps import get_current_user, require_roles
 from cybercommon.cache import cached
 from app.core.risk_calculator import RiskCalculator
 from app.core.eal_calculator import EALCalculator
@@ -50,6 +54,10 @@ from app.schemas.risk_schemas import (
 
 router = APIRouter(prefix="/api/risk", tags=["Risk"])
 
+AUTH = {"dependencies": [Depends(get_current_user)]}
+STAFF = {"dependencies": [Depends(require_roles("ANALYST", "CISO", "ADMIN"))]}
+SOVEREIGN = {"dependencies": [Depends(require_roles("CISO", "ADMIN"))]}
+
 
 def _to_response(risk_data: dict, persisted: RiskCalculation | None = None) -> RiskCalculationResponse:
     """Build a validated response, preferring the persisted record when available."""
@@ -70,7 +78,7 @@ def _to_response(risk_data: dict, persisted: RiskCalculation | None = None) -> R
     )
 
 
-@router.post("/calculate", response_model=RiskCalculationResponse)
+@router.post("/calculate", response_model=RiskCalculationResponse, **STAFF)
 def calculate_asset_risk(
     asset_id: str,
     persist: bool = Query(default=True, description="Persist calculation to DB"),
@@ -88,7 +96,7 @@ def calculate_asset_risk(
     return _to_response(risk_data, persisted)
 
 
-@router.post("/calculate-all")
+@router.post("/calculate-all", **STAFF)
 def calculate_all_risks(db: Session = Depends(get_db)):
     calc = RiskCalculator(db)
     results = calc.calculate_all_risks()
@@ -99,13 +107,13 @@ def calculate_all_risks(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/score", response_model=EnterpriseRiskResponse)
+@router.get("/score", response_model=EnterpriseRiskResponse, **AUTH)
 def get_enterprise_risk_score(db: Session = Depends(get_db)):
     calc = RiskCalculator(db)
     return calc.get_enterprise_risk()
 
 
-@router.get("/eal", response_model=EALResponse)
+@router.get("/eal", response_model=EALResponse, **AUTH)
 def get_expected_annual_loss(
     include_var: bool = Query(default=False, description="Include Monte-Carlo VaR95 block"),
     db: Session = Depends(get_db),
@@ -114,7 +122,116 @@ def get_expected_annual_loss(
     return eal_calc.calculate_eal(include_var=include_var)
 
 
-@router.get("/drivers")
+@router.get("/business-units", **AUTH)
+def get_business_unit_rollup(
+    sort_by: str = Query(default="eal", pattern="^(eal|score)$"),
+    db: Session = Depends(get_db),
+):
+    eal_calc = EALCalculator(db)
+    return eal_calc.business_units(sort_by=sort_by)
+
+
+def _csv_download(rows: list[dict], filename: str) -> Response:
+    """Serialize a list of flat dicts to an attachment CSV response."""
+    if not rows:
+        rows = [{"message": "No data available"}]
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({k: "" if v is None else str(v) for k, v in row.items()})
+    return Response(
+        content=out.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/report/export", **AUTH)
+def export_report(
+    section: str = Query(default="full", pattern="^(full|eal|compliance|business-units|trends)$"),
+    db: Session = Depends(get_db),
+):
+    """Download a CSV report section or the full self-contained JSON report."""
+    eal_calc = EALCalculator(db)
+
+    if section == "eal":
+        eal = eal_calc.calculate_eal()
+        return _csv_download(eal["asset_eals"], "scro-risk-eal.csv")
+
+    if section == "business-units":
+        rollup = eal_calc.business_units()
+        return _csv_download(rollup["business_units"], "scro-business-units.csv")
+
+    if section == "compliance":
+        rows = (
+            db.query(AssetControl, SecurityControl)
+            .join(SecurityControl, AssetControl.control_id == SecurityControl.id)
+            .all()
+        )
+        asset_mapping = [
+            {
+                "control_type": sc.control_type,
+                "status": ac.status,
+                "coverage_score": float(ac.coverage_score or 0),
+                "effectiveness_score": float(ac.effectiveness_score or 0),
+            }
+            for ac, sc in rows
+        ]
+        mapping = ComplianceMapper.apply_asset_state(asset_mapping)
+        flat = [
+            {
+                "control_type": r["control_type"],
+                "status": r["status"],
+                "coverage_score": r["coverage_score"],
+                "effectiveness_score": r["effectiveness_score"],
+                "mandates": "; ".join(f"{fr} {req}" for fr, req, _ in r["mandates"]),
+            }
+            for r in mapping["mapped_requirements"]
+        ]
+        return _csv_download(flat, "scro-compliance-mapping.csv")
+
+    if section == "trends":
+        t = eal_calc.get_risk_trends(90)
+        flat = [
+            {"date": d, "eal_inr": e, "risk_score": s, "open_vulns": v}
+            for d, e, s, v in zip(t["dates"], t["eal_values"], t["risk_scores"], t["vuln_counts"], strict=False)
+        ]
+        return _csv_download(flat, "scro-risk-trends.csv")
+
+    # full: self-contained JSON report
+    calc = RiskCalculator(db)
+    eal = eal_calc.calculate_eal(include_var=True)
+    trends = eal_calc.get_risk_trends(90)
+    return {
+        "report_type": "SCRO Enterprise Risk Report",
+        "generated_at": datetime.utcnow().isoformat(),
+        "enterprise": calc.get_enterprise_risk(),
+        "expected_annual_loss": eal,
+        "business_units": eal_calc.business_units(),
+        "compliance": ComplianceMapper.apply_asset_state([
+            {
+                "control_type": sc.control_type,
+                "status": ac.status,
+                "coverage_score": float(ac.coverage_score or 0),
+                "effectiveness_score": float(ac.effectiveness_score or 0),
+            }
+            for ac, sc in (
+                db.query(AssetControl, SecurityControl)
+                .join(SecurityControl, AssetControl.control_id == SecurityControl.id)
+                .all()
+            )
+        ]),
+        "risk_trend_90d": {
+            "dates": trends["dates"],
+            "eal_values": trends["eal_values"],
+            "risk_scores": trends["risk_scores"],
+            "vuln_counts": trends["vuln_counts"],
+        },
+    }
+
+
+@router.get("/drivers", **AUTH)
 def get_risk_drivers(
     limit: int = Query(default=10, ge=1, le=50),
     db: Session = Depends(get_db),
@@ -124,7 +241,7 @@ def get_risk_drivers(
     return enterprise["top_risk_drivers"][:limit]
 
 
-@router.get("/trends", response_model=RiskTrendResponse)
+@router.get("/trends", response_model=RiskTrendResponse, **AUTH)
 def get_risk_trends(
     days: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_db),
@@ -133,7 +250,7 @@ def get_risk_trends(
     return eal_calc.get_risk_trends(days)
 
 
-@router.post("/scenario/simulate", response_model=ScenarioResponse)
+@router.post("/scenario/simulate", response_model=ScenarioResponse, **STAFF)
 def simulate_scenario(
     request: ScenarioRequest,
     db: Session = Depends(get_db),
@@ -142,7 +259,7 @@ def simulate_scenario(
     return simulator.simulate(request.changes)
 
 
-@router.post("/event")
+@router.post("/event", **STAFF)
 def receive_risk_event(
     event: RiskEventRequest,
     db: Session = Depends(get_db),
@@ -176,7 +293,7 @@ def receive_risk_event(
     return {"status": "received", "event_type": event.event_type}
 
 
-@router.post("/snapshot")
+@router.post("/snapshot", **STAFF)
 def create_risk_snapshot(db: Session = Depends(get_db)):
     calc = RiskCalculator(db)
     snapshot = calc.persist_snapshot()
@@ -193,7 +310,7 @@ def create_risk_snapshot(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/snapshots")
+@router.get("/snapshots", **AUTH)
 def list_risk_snapshots(
     limit: int = Query(default=90, ge=1, le=365),
     db: Session = Depends(get_db),
@@ -217,13 +334,13 @@ def list_risk_snapshots(
     ]
 
 
-@router.get("/graph")
+@router.get("/graph", **AUTH)
 def get_risk_graph(db: Session = Depends(get_db)):
     graph = RiskGraph(db)
     return graph.get_graph()
 
 
-@router.get("/blast-radius/{asset_id}")
+@router.get("/blast-radius/{asset_id}", **AUTH)
 def get_blast_radius(asset_id: str, db: Session = Depends(get_db)):
     graph = RiskGraph(db)
     result = graph.get_blast_radius(asset_id)
@@ -232,19 +349,19 @@ def get_blast_radius(asset_id: str, db: Session = Depends(get_db)):
     return result
 
 
-@router.get("/attack-path")
+@router.get("/attack-path", **AUTH)
 def get_attack_path(db: Session = Depends(get_db)):
     simulator = AttackPathSimulator(db)
     return simulator.simulate()
 
 
-@router.get("/data-quality")
+@router.get("/data-quality", **AUTH)
 def get_data_quality(db: Session = Depends(get_db)):
     engine = DataQualityEngine(db)
     return engine.enterprise_quality()
 
 
-@router.get("/data-quality/{asset_id}")
+@router.get("/data-quality/{asset_id}", **AUTH)
 def get_asset_data_quality(asset_id: str, db: Session = Depends(get_db)):
     engine = DataQualityEngine(db)
     result = engine.asset_quality(asset_id)
@@ -253,7 +370,7 @@ def get_asset_data_quality(asset_id: str, db: Session = Depends(get_db)):
     return result
 
 
-@router.get("/loss-distribution")
+@router.get("/loss-distribution", **AUTH)
 def get_loss_distribution(
     simulations: int = Query(default=5000, ge=500, le=50000),
     db: Session = Depends(get_db),
@@ -262,7 +379,7 @@ def get_loss_distribution(
     return simulator.simulate(simulations)
 
 
-@router.get("/compliance")
+@router.get("/compliance", **AUTH)
 def get_compliance_mapping(db: Session = Depends(get_db)):
     rows = (
         db.query(AssetControl, SecurityControl)
@@ -281,7 +398,7 @@ def get_compliance_mapping(db: Session = Depends(get_db)):
     return ComplianceMapper.apply_asset_state(asset_mapping)
 
 
-@router.get("/forecast")
+@router.get("/forecast", **AUTH)
 def get_do_nothing_forecast(
     horizon_months: int = Query(default=12, ge=1, le=36),
     db: Session = Depends(get_db),
@@ -290,7 +407,7 @@ def get_do_nothing_forecast(
     return forecast.forecast(horizon_months)
 
 
-@router.get("/forecast/ml")
+@router.get("/forecast/ml", **AUTH)
 def get_ml_forecast(
     horizon_months: int = Query(default=12, ge=1, le=36),
     db: Session = Depends(get_db),
@@ -300,7 +417,7 @@ def get_ml_forecast(
     return forecast_ml(db, horizon_months)
 
 
-@router.post("/audit/commit")
+@router.post("/audit/commit", **STAFF)
 def commit_audit_entry(request: RiskEventRequest, db: Session = Depends(get_db)):
     chain = AuditChain(db)
     payload = {
@@ -319,19 +436,19 @@ def commit_audit_entry(request: RiskEventRequest, db: Session = Depends(get_db))
     )
 
 
-@router.get("/audit/chain")
+@router.get("/audit/chain", **AUTH)
 def get_audit_chain(db: Session = Depends(get_db)):
     chain = AuditChain(db)
     return chain.chain()
 
 
-@router.get("/audit/verify")
+@router.get("/audit/verify", **AUTH)
 def verify_audit_chain(db: Session = Depends(get_db)):
     chain = AuditChain(db)
     return chain.verify()
 
 
-@router.get("/asset/{asset_id}", response_model=RiskCalculationResponse)
+@router.get("/asset/{asset_id}", response_model=RiskCalculationResponse, **AUTH)
 def get_asset_risk(
     asset_id: str,
     db: Session = Depends(get_db),
@@ -366,21 +483,21 @@ def get_asset_risk(
 # ══════════════════════════════════════════════════════════════════════
 
 
-@router.get("/national/summary", response_model=NationalSummary)
+@router.get("/national/summary", response_model=NationalSummary, **SOVEREIGN)
 @cached("national", ttl=settings.national_cache_ttl)
 def national_summary(db: Session = Depends(get_db)):
     twin = SovereignTwin(db)
     return twin.summary()
 
 
-@router.get("/national/sectors", response_model=list[SectorRollup])
+@router.get("/national/sectors", response_model=list[SectorRollup], **SOVEREIGN)
 @cached("national", ttl=settings.national_cache_ttl)
 def national_sectors(db: Session = Depends(get_db)):
     twin = SovereignTwin(db)
     return twin.sectors()
 
 
-@router.get("/national/regions", response_model=RegionPayload)
+@router.get("/national/regions", response_model=RegionPayload, **SOVEREIGN)
 @cached("national", ttl=settings.national_cache_ttl)
 def national_regions(
     sector: str | None = Query(default=None),
@@ -390,35 +507,35 @@ def national_regions(
     return twin.regions(sector)
 
 
-@router.get("/national/agencies", response_model=list[AgencyRollup])
+@router.get("/national/agencies", response_model=list[AgencyRollup], **SOVEREIGN)
 @cached("national", ttl=settings.national_cache_ttl)
 def national_agencies(db: Session = Depends(get_db)):
     twin = SovereignTwin(db)
     return twin.agencies()
 
 
-@router.get("/national/sri", response_model=SRIPayload)
+@router.get("/national/sri", response_model=SRIPayload, **SOVEREIGN)
 @cached("national", ttl=settings.national_cache_ttl)
 def national_sri(db: Session = Depends(get_db)):
     twin = SovereignTwin(db)
     return twin.sri()
 
 
-@router.get("/national/report", response_model=NationalReport)
+@router.get("/national/report", response_model=NationalReport, **SOVEREIGN)
 @cached("national", ttl=settings.national_cache_ttl)
 def national_report(db: Session = Depends(get_db)):
     twin = SovereignTwin(db)
     return twin.regulator_report()
 
 
-@router.get("/compliance/{sector}", response_model=SectorCompliance)
+@router.get("/compliance/{sector}", response_model=SectorCompliance, **SOVEREIGN)
 @cached("national", ttl=settings.national_cache_ttl)
 def sector_compliance(sector: str, db: Session = Depends(get_db)):
     twin = SovereignTwin(db)
     return twin.sector_compliance(sector)
 
 
-@router.post("/exercises", response_model=ExerciseRun)
+@router.post("/exercises", response_model=ExerciseRun, **SOVEREIGN)
 def run_exercise(request: ExerciseCreateRequest, db: Session = Depends(get_db)):
     engine = DrillEngine(db)
     result = engine.run(
@@ -436,13 +553,13 @@ def run_exercise(request: ExerciseCreateRequest, db: Session = Depends(get_db)):
     return result
 
 
-@router.get("/exercises", response_model=list[ExerciseHistory])
+@router.get("/exercises", response_model=list[ExerciseHistory], **SOVEREIGN)
 def list_exercises(db: Session = Depends(get_db)):
     engine = DrillEngine(db)
     return engine.list_exercises()
 
 
-@router.post("/exercises/{exercise_id}/rerun", response_model=ExerciseRun)
+@router.post("/exercises/{exercise_id}/rerun", response_model=ExerciseRun, **SOVEREIGN)
 def rerun_exercise(exercise_id: str, db: Session = Depends(get_db)):
     """Re-execute a past drill with the same template + scope (new audit entry)."""
     engine = DrillEngine(db)
@@ -452,7 +569,7 @@ def rerun_exercise(exercise_id: str, db: Session = Depends(get_db)):
     return result
 
 
-@router.get("/data-sources", response_model=list[DataSourcePayload])
+@router.get("/data-sources", response_model=list[DataSourcePayload], **SOVEREIGN)
 def list_data_sources(db: Session = Depends(get_db)):
     """Registered ingestion connectors and their health state."""
     rows = db.query(DataSource).order_by(DataSource.name).all()
@@ -471,19 +588,19 @@ def list_data_sources(db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/tprm", response_model=TPRMSummary)
+@router.get("/tprm", response_model=TPRMSummary, **SOVEREIGN)
 def tprm_summary(db: Session = Depends(get_db)):
     manager = TPRMManager(db)
     return manager.summary()
 
 
-@router.get("/tprm/vendors", response_model=list[VendorRisk])
+@router.get("/tprm/vendors", response_model=list[VendorRisk], **SOVEREIGN)
 def tprm_vendors(db: Session = Depends(get_db)):
     manager = TPRMManager(db)
     return manager.vendors()
 
 
-@router.get("/tprm/cascade/{vendor_id}", response_model=VendorCascade)
+@router.get("/tprm/cascade/{vendor_id}", response_model=VendorCascade, **SOVEREIGN)
 def tprm_cascade(vendor_id: str, db: Session = Depends(get_db)):
     manager = TPRMManager(db)
     result = manager.cascade(vendor_id)
@@ -492,7 +609,7 @@ def tprm_cascade(vendor_id: str, db: Session = Depends(get_db)):
     return result
 
 
-@router.get("/tprm/asset/{asset_id}", response_model=AssetAttribution)
+@router.get("/tprm/asset/{asset_id}", response_model=AssetAttribution, **SOVEREIGN)
 def tprm_asset_attribution(asset_id: str, db: Session = Depends(get_db)):
     manager = TPRMManager(db)
     result = manager.asset_attribution(asset_id)

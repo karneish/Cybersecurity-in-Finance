@@ -18,6 +18,18 @@ from sqlalchemy.orm import Session
 
 from app.models.investment import Asset, Vulnerability, AssetControl, SecurityControl
 
+try:
+    from ortools.sat.python.cp_model import (
+        CpModel,
+        CpSolver,
+        FEASIBLE,
+        OPTIMAL,
+    )
+
+    _HAS_ORTools = True
+except Exception:  # pragma: no cover - defensive fallback
+    _HAS_ORTools = False
+
 CVSS_PROBABILITY_MAP = {
     10: 0.95, 9: 0.85, 8: 0.70, 7: 0.50, 6: 0.30,
     5: 0.15, 4: 0.08, 3: 0.03, 2: 0.01, 1: 0.005,
@@ -135,20 +147,10 @@ class InvestmentOptimizer:
         total_cost = 0.0
 
         pool = [c for c in candidates if c["eal_reduction"] > 0 and c["implementation_cost"] > 0]
-        pool.sort(key=lambda c: -c["eal_reduction"])
-        while pool:
-            best = None
-            for c in pool:
-                if c["implementation_cost"] <= budget_left:
-                    if best is None or c["eal_reduction"] > best["eal_reduction"]:
-                        best = c
-            if best is None:
-                break
-            pool.remove(best)
-            selected.append(best)
-            budget_left -= best["implementation_cost"]
-            total_reduction += best["eal_reduction"]
-            total_cost += best["implementation_cost"]
+        selected = self._cp_knapsack(pool, budget_inr)
+        total_reduction = sum(float(c["eal_reduction"]) for c in selected)
+        total_cost = sum(float(c["implementation_cost"]) for c in selected)
+        budget_left = max(float(budget_inr) - total_cost, 0.0)
 
         selected = sorted(selected, key=lambda c: -self._rosi(c, time_horizon_years))
         for idx, item in enumerate(selected):
@@ -378,29 +380,13 @@ class InvestmentOptimizer:
     # ── maximize mode (budget-constrained) ────────────────────────────
     def _maximize_mode(self, controls, current_eal, budget_inr, time_horizon_years) -> dict:
         candidates = [c for c in controls if c["eal_reduction"] > 0 and c["implementation_cost"] > 0]
-        budget_left = budget_inr
-        selected = []
-        total_reduction = 0.0
-        total_cost = 0.0
 
-        # step 1: maximize EAL reduction with a bounded knapsack greedy
-        candidates.sort(key=lambda c: -c["eal_reduction"])
-        remaining_pool = list(candidates)
-        while remaining_pool:
-            best = None
-            for c in remaining_pool:
-                if c["implementation_cost"] <= budget_left:
-                    if best is None or c["eal_reduction"] > best["eal_reduction"]:
-                        best = c
-            if best is None:
-                break
-            remaining_pool.remove(best)
-            selected.append(best)
-            budget_left -= best["implementation_cost"]
-            total_reduction += best["eal_reduction"]
-            total_cost += best["implementation_cost"]
+        selected = self._cp_knapsack(candidates, budget_inr)
+        total_reduction = sum(float(c["eal_reduction"]) for c in selected)
+        total_cost = sum(float(c["implementation_cost"]) for c in selected)
+        budget_left = max(float(budget_inr) - total_cost, 0.0)
 
-        # step 2: try swapping for equally-cheap higher-ROSI option (tie-break)
+        # tie-break: prefer higher-ROSI among equal-reduction solutions
         selected = sorted(selected, key=lambda c: -self._rosi(c, time_horizon_years))
         for idx, item in enumerate(selected):
             item["priority"] = idx + 1
@@ -562,6 +548,40 @@ class InvestmentOptimizer:
             "items": [],
             "summary": "No security controls available for optimization.",
         }
+
+    # ── OR-Tools CP-SAT knapsack ──────────────────────────────────────
+    def _cp_knapsack(self, candidates: list[dict], budget_inr: float) -> list[dict]:
+        """Globally optimal 0/1 portfolio under budget (max EAL reduction).
+
+        Costs and reductions are scaled to integer units for the CP-SAT
+        integer domain; falls back to the classic density-greedy if OR-Tools
+        is unavailable in the runtime.
+        """
+        usable = [c for c in candidates if c["implementation_cost"] > 0 and c["eal_reduction"] > 0]
+        if not usable:
+            return []
+        if _HAS_ORTools:
+            model = CpModel()
+            gains = [int(round(float(c["eal_reduction"]) * 10000)) for c in usable]
+            costs = [int(round(float(c["implementation_cost"]) * 100)) for c in usable]
+            budget = max(int(round(float(budget_inr) * 100)), 0)
+            picks = [model.NewBoolVar(f"pick_{i}") for i in range(len(usable))]
+            model.Add(sum(picks[i] * costs[i] for i in range(len(usable))) <= budget)
+            model.Maximize(sum(picks[i] * gains[i] for i in range(len(usable))))
+            solver = CpSolver()
+            solver.parameters.max_time_in_seconds = 10.0
+            status = solver.Solve(model)
+            if status in (OPTIMAL, FEASIBLE):
+                return [usable[i] for i in range(len(usable)) if solver.Value(picks[i])]
+
+        # Fallback: density-greedy (best EAL reduction per rupee, then by value).
+        budget_left = float(budget_inr)
+        selected = []
+        for c in sorted(usable, key=lambda x: (-(x["eal_reduction"] / x["implementation_cost"]), -x["eal_reduction"])):
+            if c["implementation_cost"] <= budget_left:
+                selected.append(c)
+                budget_left -= c["implementation_cost"]
+        return selected
 
     # ── risk math (EAL) ───────────────────────────────────────────────
     def _controls_for(self, asset_uuid) -> list[dict]:

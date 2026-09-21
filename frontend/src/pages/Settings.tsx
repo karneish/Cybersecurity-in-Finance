@@ -1,14 +1,12 @@
 import { useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
-import { useTheme } from '@/theme/useTheme'
-import { User, Bell, Palette, Code, Info } from 'lucide-react'
+import { User, Bell, Code, Info } from 'lucide-react'
 import { clsx } from 'clsx'
 
-type Section = 'profile' | 'notifications' | 'theme' | 'api' | 'about'
+type Section = 'profile' | 'notifications' | 'api' | 'about'
 
 export default function Settings() {
   const { user } = useAuthStore()
-  const { theme, setTheme } = useTheme()
   const [activeSection, setActiveSection] = useState<Section>('profile')
   const [wsEnabled, setWsEnabled] = useState(true)
   const [emailAlerts, setEmailAlerts] = useState(false)
@@ -16,7 +14,6 @@ export default function Settings() {
   const sections: { key: Section; label: string; icon: React.ReactNode }[] = [
     { key: 'profile', label: 'Profile', icon: <User className="h-4 w-4" /> },
     { key: 'notifications', label: 'Notifications', icon: <Bell className="h-4 w-4" /> },
-    { key: 'theme', label: 'Theme', icon: <Palette className="h-4 w-4" /> },
     { key: 'api', label: 'API Configuration', icon: <Code className="h-4 w-4" /> },
     { key: 'about', label: 'About', icon: <Info className="h-4 w-4" /> },
   ]
@@ -26,7 +23,7 @@ export default function Settings() {
       <h1 className="text-2xl font-bold text-text-primary">Settings</h1>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-        <nav className="cyber-card p-2">
+        <nav className="cyber-card p-2" data-tour="settings-nav">
           {sections.map((s) => (
             <button
               key={s.key}
@@ -46,7 +43,7 @@ export default function Settings() {
 
         <div className="lg:col-span-3">
           {activeSection === 'profile' && (
-            <div className="cyber-card p-6">
+            <div className="cyber-card p-6" data-tour="settings-profile">
               <h2 className="mb-4 text-lg font-semibold text-text-primary">Profile</h2>
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
@@ -145,41 +142,6 @@ export default function Settings() {
                     />
                   </button>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {activeSection === 'theme' && (
-            <div className="cyber-card p-6">
-              <h2 className="mb-1 text-lg font-semibold text-text-primary">Theme</h2>
-              <p className="mb-4 text-xs text-text-tertiary">
-                Colour scheme applies across the observatory and persists between sessions.
-              </p>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setTheme('light')}
-                  className={clsx(
-                    'flex-1 rounded-xl border-2 p-4 text-center transition-colors',
-                    theme === 'light' ? 'border-gold bg-gold/10' : 'border-border-default hover:border-border-subtle'
-                  )}
-                >
-                  <div className="mx-auto mb-2 flex h-12 w-20 items-center justify-center rounded-lg border border-border-subtle bg-bg-app shadow-sm">
-                    <Palette className="h-6 w-6 text-text-secondary" />
-                  </div>
-                  <span className="text-sm font-medium text-text-primary">Light</span>
-                </button>
-                <button
-                  onClick={() => setTheme('dark')}
-                  className={clsx(
-                    'flex-1 rounded-xl border-2 p-4 text-center transition-colors',
-                    theme === 'dark' ? 'border-gold bg-gold/10' : 'border-border-default hover:border-border-subtle'
-                  )}
-                >
-                  <div className="mx-auto mb-2 flex h-12 w-20 items-center justify-center rounded-lg border border-border-subtle bg-[#070C16] shadow-sm">
-                    <Palette className="h-6 w-6 text-[#E6C168]" />
-                  </div>
-                  <span className="text-sm font-medium text-text-primary">Dark</span>
-                </button>
               </div>
             </div>
           )}

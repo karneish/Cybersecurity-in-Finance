@@ -26,7 +26,7 @@ within 5 business days.
 ## Hardening notes for operators
 
 - **Change `JWT_SECRET`** before any non-local deployment.
-- **Change every demo password** (`admin`/`ciso`/`analyst` / `admin123`).
+- **Change the demo password** on all three seeded accounts (`scro_regulator` / `scro_banker` / `scro_auditor`, shared password `Scro@2026!`) before any non-local deployment.
 - Do not expose `services/*/docs` (Swagger) or `/health` publicly in production.
 - Run Postgres on a private network; containers reach it via `host.docker.internal`.
 - Frontend roles are enforced client-side for UX only — every dangerous endpoint

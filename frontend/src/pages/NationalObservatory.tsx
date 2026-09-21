@@ -37,7 +37,7 @@ export default function NationalObservatory() {
         <h1 className="text-2xl font-bold text-text-primary">National Observatory</h1>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2" data-tour="national-tabs">
         {TABS.map((t) => (
           <button
             key={t.key}

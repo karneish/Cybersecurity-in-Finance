@@ -7,7 +7,7 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke_sacro.ps1
 ```
 
 End-to-end verification of the full stack:
-1. Health checks on all 12 services
+1. Health checks on the 12 long-running services (`db-init` runs migrations + seeds once and exits)
 2. Login/register for all 4 demo users
 3. Authenticated CRUD on assets, vulnerabilities, controls, ingestion
 4. Risk-engine: score, EAL, scenario, forecast, ML forecast

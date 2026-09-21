@@ -4,6 +4,7 @@ from datetime import datetime
 import uuid
 
 from app.database import get_db
+from cybercommon.deps import require_roles
 from app.core.optimizer import InvestmentOptimizer
 from app.models.investment import InvestmentPlan, InvestmentItem
 from app.schemas.optimize_schemas import (
@@ -19,8 +20,10 @@ from app.schemas.optimize_schemas import (
 
 router = APIRouter(prefix="/api/investment", tags=["Investment"])
 
+CISO = {"dependencies": [Depends(require_roles("CISO", "ADMIN"))]}
 
-@router.post("/national/optimize", response_model=NationalOptimizeResponse)
+
+@router.post("/national/optimize", response_model=NationalOptimizeResponse, **CISO)
 def optimize_national_budget(
     request: NationalOptimizeRequest,
     db: Session = Depends(get_db),
@@ -32,7 +35,7 @@ def optimize_national_budget(
     )
 
 
-@router.post("/curve", response_model=CurveResponse)
+@router.post("/curve", response_model=CurveResponse, **CISO)
 def investment_curve(
     request: CurveRequest,
     db: Session = Depends(get_db),
@@ -46,7 +49,7 @@ def investment_curve(
     )
 
 
-@router.post("/optimize")
+@router.post("/optimize", **CISO)
 def optimize_budget(
     request: OptimizeRequest,
     db: Session = Depends(get_db),
@@ -61,13 +64,13 @@ def optimize_budget(
     return result
 
 
-@router.get("/controls")
+@router.get("/controls", **CISO)
 def list_available_controls(db: Session = Depends(get_db)):
     optimizer = InvestmentOptimizer(db)
     return optimizer.get_available_controls()
 
 
-@router.get("/rosi")
+@router.get("/rosi", **CISO)
 def calculate_rosi(
     time_horizon_years: int = Query(default=3, ge=1, le=10),
     db: Session = Depends(get_db),
@@ -99,7 +102,7 @@ def calculate_rosi(
     return results
 
 
-@router.post("/plans")
+@router.post("/plans", **CISO)
 def create_plan(request: PlanCreateRequest, db: Session = Depends(get_db)):
     plan = InvestmentPlan(
         name=request.name,
@@ -131,7 +134,7 @@ def create_plan(request: PlanCreateRequest, db: Session = Depends(get_db)):
     }
 
 
-@router.get("/plans")
+@router.get("/plans", **CISO)
 def list_plans(db: Session = Depends(get_db)):
     plans = db.query(InvestmentPlan).order_by(InvestmentPlan.created_at.desc()).all()
     return [
@@ -149,7 +152,7 @@ def list_plans(db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/plans/{plan_id}")
+@router.get("/plans/{plan_id}", **CISO)
 def get_plan(plan_id: str, db: Session = Depends(get_db)):
     plan = db.query(InvestmentPlan).filter(InvestmentPlan.id == plan_id).first()
     if not plan:

@@ -1,11 +1,48 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from cybercommon.models import AssetControl, SecurityControl
+from cybercommon.models import AssetControl, SecurityControl, SecurityEvent, Vulnerability
 
 IMPLEMENTED_STATUSES = ("IMPLEMENTED", "VERIFIED")
+
+INCIDENT_EVENT_TYPES = ("INCIDENT", "ALERT", "BREACH", "COMPROMISE", "RANSOMWARE")
+
+
+def _config_strength(ac: AssetControl, control: SecurityControl | None) -> float:
+    """How well the control is actually configured regardless of declared status."""
+    coverage = float(ac.coverage_score or 0)
+    if control is None or control.maturity_levels is None:
+        maturity = 1.0
+    else:
+        maturity = int(ac.maturity_level or 1) / max(int(control.maturity_levels), 1)
+    return round(min(1.0, coverage * maturity), 4)
+
+
+def _incident_signals(db: Session, asset_id: UUID | None) -> tuple[int, int]:
+    """(incident_count, activity_count) for the asset over the trailing 90 days."""
+    since = datetime.utcnow() - timedelta(days=90)
+    q = db.query(SecurityEvent).filter(SecurityEvent.timestamp >= since)
+    if asset_id:
+        q = q.filter(SecurityEvent.source_asset == asset_id)
+    events = q.all()
+    incidents = [
+        e for e in events
+        if any(t in (e.event_type or "").upper() for t in INCIDENT_EVENT_TYPES)
+    ]
+    return len(incidents), len(events)
+
+
+def _compliance_signals(db: Session, asset_id: UUID | None) -> int:
+    """Open CRITICAL/HIGH vulnerabilities on the asset (dampens claimed effectiveness)."""
+    q = db.query(Vulnerability).filter(
+        Vulnerability.status.in_(["OPEN", "IN_PROGRESS"]),
+        Vulnerability.severity.in_(["CRITICAL", "HIGH"]),
+    )
+    if asset_id:
+        q = q.filter(Vulnerability.affected_asset == asset_id)
+    return q.count()
 
 
 def to_dict(control: SecurityControl) -> dict:
@@ -32,6 +69,7 @@ def asset_control_to_dict(ac: AssetControl, control: SecurityControl | None = No
         "status": ac.status,
         "coverageScore": float(ac.coverage_score or 0),
         "effectivenessScore": float(ac.effectiveness_score or 0),
+        "configStrength": _config_strength(ac, control),
         "maturityLevel": ac.maturity_level,
         "implementedAt": ac.implemented_at.isoformat() if ac.implemented_at else None,
         "lastVerifiedAt": ac.last_verified_at.isoformat() if ac.last_verified_at else None,
@@ -104,24 +142,35 @@ def update_status(db: Session, asset_control_id: UUID, status_: str) -> tuple[As
 
 
 def effectiveness(db: Session, asset_id: UUID | None = None) -> dict:
-    query = db.query(AssetControl)
+    rows = (
+        db.query(AssetControl, SecurityControl)
+        .join(SecurityControl, SecurityControl.id == AssetControl.control_id, isouter=True)
+        .order_by(SecurityControl.name)
+        .all()
+    )
     if asset_id:
-        query = query.filter(AssetControl.asset_id == asset_id)
-    rows = query.all()
+        rows = [r for r in rows if r[0].asset_id == asset_id]
+
     total = len(rows)
-    implemented = [
-        ac for ac in rows
-        if (ac.status or "").upper() in IMPLEMENTED_STATUSES
-    ]
-    implemented_ver = [ac for ac in rows if (ac.status or "").upper() == "VERIFIED"]
-    avg_eff = (
-        sum(float(ac.effectiveness_score or 0) for ac in rows) / total
-        if total else 0.0
-    )
-    avg_mat = (
-        sum(int(ac.maturity_level or 0) for ac in rows) / total
-        if total else 0.0
-    )
+    implemented = [ac for ac, _ in rows if (ac.status or "").upper() in IMPLEMENTED_STATUSES]
+    implemented_ver = [ac for ac, _ in rows if (ac.status or "").upper() == "VERIFIED"]
+
+    if total:
+        avg_eff = sum(float(ac.effectiveness_score or 0) for ac, _ in rows) / total
+        avg_mat = sum(int(ac.maturity_level or 0) for ac, _ in rows) / total
+        cfg_strengths = [_config_strength(ac, c) for ac, c in rows]
+        avg_cfg = sum(cfg_strengths) / total
+    else:
+        avg_eff = avg_mat = avg_cfg = 0.0
+
+    incident_count, activity_count = _incident_signals(db, asset_id)
+    open_critical_high = _compliance_signals(db, asset_id)
+
+    incident_dampening = round(min(0.35, incident_count * 0.05), 4)
+    compliance_dampening = round(min(0.30, open_critical_high * 0.03), 4)
+    dampening = min(0.5, incident_dampening + compliance_dampening)
+    dampened_eff = round(max(0.0, avg_eff * (1 - dampening)), 4)
+
     return {
         "assetId": str(asset_id) if asset_id else None,
         "overallEffectiveness": round(avg_eff, 4),
@@ -130,6 +179,23 @@ def effectiveness(db: Session, asset_id: UUID | None = None) -> dict:
         "controlsVerified": len(implemented_ver),
         "controlsTotal": total,
         "averageMaturityLevel": round(avg_mat, 2),
+        "configurationStrength": round(avg_cfg, 4),
+        "incidentHistory": {
+            "incidentCount": incident_count,
+            "securityActivityCount": activity_count,
+            "incidentDampening": incident_dampening,
+        },
+        "complianceStatus": {
+            "openCriticalHigh": open_critical_high,
+            "complianceDampening": compliance_dampening,
+        },
+        "dampenedEffectiveness": dampened_eff,
+        "signalBreakdown": [
+            f"Mean declared effectiveness: {avg_eff:.2f}",
+            f"Configuration strength (coverage × maturity ratio): {avg_cfg:.2f}",
+            f"Incident dampening: -{incident_dampening:.2f} ({incident_count} incidents in 90d)",
+            f"Compliance dampening: -{compliance_dampening:.2f} ({open_critical_high} open CRITICAL/HIGH)",
+        ],
     }
 
 

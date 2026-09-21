@@ -3,14 +3,15 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\smoke_sacro.ps1
 #
 # Verifies: login -> national summary -> sector compliance -> drill ->
-#           national budget optimize -> TPRM cascade -> audit verify -> WS alive.
+#           national budget optimize -> TPRM cascade -> audit verify ->
+#           WS alive -> full API surface (assets/vulns/controls/ingestion/
+#           alerts/insights/AI/investment/scenario simulate).
 
 param(
     [string]$Base = "http://localhost:8080/api",
     [string]$WsUrl = "http://localhost:8086",
     [string]$Username = "scro_regulator",
-    [string]$Password = "Scro@2026!",
-    [string]$Email = "regulator@scro.gov.in"
+    [string]$Password = "Scro@2026!"
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,26 +31,13 @@ function Assert-Truthy($value, [string]$label) {
     if ($null -eq $value -or $value -eq "" -or $value -eq 0) { throw "$label is empty/falsy" }
 }
 
-# ─── 1. Login (or register on first run) ────────────────────────────────
+# ─── 1. Login as the seeded regulator persona (CISO) ──────────────────────
 Step "Login" {
     $loginBody = @{ username = $Username; password = $Password } | ConvertTo-Json
-    try {
-        $resp = Invoke-RestMethod -Method Post -Uri "$Base/auth/login" -ContentType "application/json" -Body $loginBody
-        $script:token = $resp.token
-    } catch {
-        $regBody = @{
-            username = $Username
-            email = $Email
-            password = $Password
-            fullName = "SCRO Regulator"
-            role = "ANALYST"
-        } | ConvertTo-Json
-        Invoke-RestMethod -Method Post -Uri "$Base/auth/register" -ContentType "application/json" -Body $regBody | Out-Null
-        $resp = Invoke-RestMethod -Method Post -Uri "$Base/auth/login" -ContentType "application/json" -Body $loginBody
-        $script:token = $resp.token
-    }
+    $resp = Invoke-RestMethod -Method Post -Uri "$Base/auth/login" -ContentType "application/json" -Body $loginBody
+    $script:token = $resp.token
     Assert-Truthy $script:token "auth token"
-    Pass "Authenticated as $Username"
+    Pass "Authenticated as $Username ($($resp.user.role))"
 }
 
 $headers = @{ Authorization = "Bearer $script:token" }
@@ -115,6 +103,56 @@ Step "WebSocket endpoint reachable" {
         if (-not $socket.Connected) { throw "connection failed" }
         Pass "WebSocket endpoint reachable (port 8086)"
     } finally { $socket.Dispose() }
+}
+
+# ─── 9. Asset / vulnerability / control surface ─────────────────────────
+Step "Asset + vuln + control surface" {
+    $a = Invoke-RestMethod -Method Get -Uri "$Base/assets" -Headers $headers
+    Assert-Truthy $a.data.Count "assets"
+    $v = Invoke-RestMethod -Method Get -Uri "$Base/vulnerabilities?page=1&size=20" -Headers $headers
+    Assert-Truthy $v.total "vuln total"
+    Assert-Truthy $v.data.Count "vuln page data"
+    Invoke-RestMethod -Method Get -Uri "$Base/vulnerabilities/stats" -Headers $headers | Out-Null
+    $c = Invoke-RestMethod -Method Get -Uri "$Base/controls" -Headers $headers
+    Invoke-RestMethod -Method Get -Uri "$Base/controls/effectiveness" -Headers $headers | Out-Null
+    Pass "assets=$($a.data.Count) vulnsTotal=$($v.total) vulns=$($v.data.Count) controls=$($c.Count)"
+}
+
+# ─── 10. Ingestion + alerts surface ─────────────────────────────────────
+Step "Ingestion + alerts surface" {
+    $ev = Invoke-RestMethod -Method Get -Uri "$Base/ingestion/events" -Headers $headers
+    Invoke-RestMethod -Method Get -Uri "$Base/ingestion/stats" -Headers $headers | Out-Null
+    $rules = Invoke-RestMethod -Method Get -Uri "$Base/alerts/rules" -Headers $headers
+    $events = Invoke-RestMethod -Method Get -Uri "$Base/alerts/events" -Headers $headers
+    $hc = Invoke-RestMethod -Method Get -Uri "$Base/alerts/health-check" -Headers $headers
+    Assert-Truthy $hc.supported_metrics.Count "health-check supported metrics"
+    Pass "ingestionEvents=$($ev.Count) rules=$($rules.Count) alertEvents=$($events.Count) metrics=$($hc.supported_metrics.Count)"
+}
+
+# ─── 11. Insights + simulation surface ──────────────────────────────────
+Step "Insights + simulations" {
+    Invoke-RestMethod -Method Get -Uri "$Base/risk/loss-distribution?simulations=1000" -Headers $headers | Out-Null
+    Invoke-RestMethod -Method Get -Uri "$Base/risk/graph" -Headers $headers | Out-Null
+    Invoke-RestMethod -Method Get -Uri "$Base/risk/attack-path" -Headers $headers | Out-Null
+    $snapshots = Invoke-RestMethod -Method Get -Uri "$Base/risk/snapshots" -Headers $headers
+    $ds = Invoke-RestMethod -Method Get -Uri "$Base/risk/data-sources" -Headers $headers
+    Assert-Truthy $ds.Count "data sources"
+    Pass "loss-distribution + graph + attack-path + $($snapshots.Count) snapshots + $($ds.Count) data sources"
+}
+
+# ─── 12. Scenario simulate + AI + investment ────────────────────────────
+Step "Scenario simulate + AI + investment" {
+    $simBody = @{
+        changes = @(
+            @{ type = "add_control"; control_type = "MFA"; value = 0.85 }
+        )
+    } | ConvertTo-Json -Depth 5
+    $sim = Invoke-RestMethod -Method Post -Uri "$Base/risk/scenario/simulate" -Headers $headers -ContentType "application/json" -Body $simBody
+    Assert-Truthy $sim.simulatedEal "simulated EAL"
+    $recs = Invoke-RestMethod -Method Post -Uri "$Base/ai/recommend" -Headers $headers -ContentType "application/json" -Body (@{ context = "Q3 national cyber posture"; focusArea = "identity" } | ConvertTo-Json)
+    Invoke-RestMethod -Method Post -Uri "$Base/ai/summarize" -Headers $headers -ContentType "application/json" -Body (@{ audience = "executive" } | ConvertTo-Json) | Out-Null
+    Invoke-RestMethod -Method Get -Uri "$Base/investment/rosi" -Headers $headers | Out-Null
+    Pass "sim EAL=$($sim.simulatedEal) AI recs=$($recs.Count)"
 }
 
 # ─── Summary ────────────────────────────────────────────────────────────

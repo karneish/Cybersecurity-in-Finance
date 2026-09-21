@@ -19,9 +19,11 @@ from cybercommon.redis import redis_client
 
 risk_dest = "/topic/risk/updated"
 ingestion_dest = "/topic/ingestion/event"
+alert_dest = "/topic/risk/alert"
 
 REDIS_TO_DEST = {
     "risk.events.updated": risk_dest,
+    "risk.events.alert": alert_dest,
     "security.events.vulnerability": ingestion_dest,
     "security.events.control": ingestion_dest,
     "security.events.asset": ingestion_dest,
@@ -129,16 +131,47 @@ class RedisBridgeThread(threading.Thread):
                 pubsub = client.pubsub()
                 pubsub.subscribe(*list(REDIS_TO_DEST.keys()))
                 for message in pubsub.listen():
-                    if message.get("type") == "message":
-                        destination = REDIS_TO_DEST.get(message["channel"], ingestion_dest)
-                        asyncio.run_coroutine_threadsafe(
-                            self.broker.broadcast(destination, message["data"]), self.loop
-                        )
+                    if message.get("type") != "message":
+                        continue
+                    if message["channel"] == "risk.events.updated":
+                        self._evaluate_asset_alert(message["data"])
+                    destination = REDIS_TO_DEST.get(message["channel"], ingestion_dest)
+                    asyncio.run_coroutine_threadsafe(
+                        self.broker.broadcast(destination, message["data"]), self.loop
+                    )
                 pubsub.close()
             except Exception:
                 import time
 
                 time.sleep(2)
+
+    def _evaluate_asset_alert(self, raw: str) -> None:
+        """Auto-evaluate threshold rules from per-asset risk-update messages."""
+        try:
+            payload = json.loads(raw)
+        except (ValueError, TypeError):
+            return
+        metrics = {
+            "risk_score": payload.get("currentRisk"),
+            "total_eal": payload.get("currentEAL"),
+            "asset_id": payload.get("assetId"),
+        }
+        metrics = {k: v for k, v in metrics.items() if isinstance(v, (int, float))}
+        if not metrics:
+            return
+        try:
+            from cybercommon.database import SessionLocal
+
+            with SessionLocal() as db:
+                from app.core.alerts import evaluate_rules
+
+                evaluate_rules(db, metrics)
+        except Exception:
+            import logging
+
+            logging.getLogger("notification-service.bridge").exception(
+                "Failed to auto-evaluate risk alert"
+            )
 
 
 def start_bridge(loop: asyncio.AbstractEventLoop) -> RedisBridgeThread:

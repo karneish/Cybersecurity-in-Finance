@@ -7,80 +7,37 @@
     color-scheme: light;
 
     /* Surfaces */
-    --bg-app: 244 247 251;
-    --bg-sidebar: 255 255 255;
+    --bg-app: 243 245 249;
+    --bg-masthead: 11 27 60;
     --bg-surface: 255 255 255;
-    --bg-elevated: 252 253 255;
-    --bg-hover: 238 243 250;
+    --bg-elevated: 255 255 255;
+    --bg-hover: 239 243 248;
     --bg-input: 255 255 255;
-    --bg-surface-2: 242 246 251;
+    --bg-surface-2: 241 244 249;
 
     /* Borders */
-    --border-default: 203 213 225;
+    --border-default: 198 207 221;
     --border-subtle: 226 232 240;
-    --border-active: 21 94 177;
+    --border-active: 27 58 107;
 
     /* Text */
     --text-primary: 15 31 55;
-    --text-secondary: 82 96 122;
+    --text-secondary: 79 93 119;
     --text-tertiary: 100 116 139;
     --text-disabled: 160 174 192;
 
     /* Accents */
-    --accent-primary: 21 94 177;
-    --accent-secondary: 82 96 122;
+    --accent-primary: 27 58 107;
+    --accent-secondary: 84 99 127;
     --accent-contrast: 255 255 255;
 
-    /* Status */
-    --status-critical: 220 38 74;
-    --status-high: 234 88 12;
-    --status-medium: 184 118 4;
+    /* Status (muted, desaturated) */
+    --status-critical: 185 28 28;
+    --status-high: 194 65 12;
+    --status-medium: 161 98 7;
     --status-low: 21 128 61;
-    --status-info: 2 132 199;
-    --status-live: 4 150 106;
-
-    /* Signature */
-    --gold: 176 132 22;
-  }
-
-  [data-theme='dark'] {
-    color-scheme: dark;
-
-    /* Surfaces */
-    --bg-app: 10 15 26;
-    --bg-sidebar: 7 12 22;
-    --bg-surface: 15 24 40;
-    --bg-elevated: 19 29 49;
-    --bg-hover: 26 38 62;
-    --bg-input: 15 24 40;
-    --bg-surface-2: 24 35 58;
-
-    /* Borders */
-    --border-default: 39 52 79;
-    --border-subtle: 28 39 63;
-    --border-active: 125 211 252;
-
-    /* Text */
-    --text-primary: 226 232 240;
-    --text-secondary: 148 163 184;
-    --text-tertiary: 100 116 139;
-    --text-disabled: 71 85 105;
-
-    /* Accents */
-    --accent-primary: 125 211 252;
-    --accent-secondary: 148 163 184;
-    --accent-contrast: 10 15 26;
-
-    /* Status */
-    --status-critical: 244 63 94;
-    --status-high: 249 115 22;
-    --status-medium: 245 158 11;
-    --status-low: 34 197 94;
-    --status-info: 56 189 248;
-    --status-live: 52 211 153;
-
-    /* Signature */
-    --gold: 230 193 104;
+    --status-info: 3 105 161;
+    --status-live: 4 120 87;
   }
 
   html {
@@ -147,10 +104,6 @@
     border-color: rgb(var(--border-default));
   }
 
-  [data-theme='dark'] .cyber-card {
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 6px 18px rgba(0, 0, 0, 0.25);
-  }
-
   .cyber-panel {
     border-radius: 8px;
     border: 1px solid rgb(var(--border-subtle));
@@ -192,13 +145,13 @@
     font-size: 13px;
     font-weight: 500;
     color: #fff;
-    background-color: #1e5aa8;
+    background-color: #1b3a6b;
     transition: background-color 0.15s ease, box-shadow 0.15s ease;
   }
 
   .cyber-btn-primary:hover {
-    background-color: #174a8c;
-    box-shadow: 0 4px 14px rgba(21, 94, 177, 0.25);
+    background-color: #152c52;
+    box-shadow: 0 4px 14px rgba(27, 58, 107, 0.22);
   }
 
   .cyber-btn-primary:focus-visible {
@@ -247,20 +200,6 @@
     font-size: 11px;
     font-weight: 500;
     height: 22px;
-  }
-
-  .text-gradient-gold {
-    background: linear-gradient(100deg, rgb(var(--gold)), rgb(var(--gold)) 60%, #f7e6a9);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  .sovereign-grid {
-    background-image:
-      linear-gradient(rgb(var(--accent-primary) / 0.06) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(var(--accent-primary) / 0.06) 1px, transparent 1px);
-    background-size: 44px 44px;
   }
 
   .toast-enter {

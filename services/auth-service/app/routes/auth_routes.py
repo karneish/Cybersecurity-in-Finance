@@ -7,6 +7,7 @@ from cybercommon.database import get_db
 from cybercommon.deps import UserIdentity, get_current_user
 
 from app import services
+from app.config import settings
 from app.schemas import (
     LoginRequest,
     LoginResponse,
@@ -29,6 +30,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 @router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    if not settings.allow_register:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Registration is disabled — only the three SCRO demo accounts may log in",
+        )
     try:
         return services.register(db, payload)
     except ValueError as exc:

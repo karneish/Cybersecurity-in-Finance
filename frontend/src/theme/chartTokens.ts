@@ -19,7 +19,7 @@ export interface ChartTokens {
   tooltipText: string
   /** Border used to separate series slices from the chart surface */
   seriesBorder: string
-  /** Primary series color (strong contrast in both themes) */
+  /** Primary series color (strong contrast) */
   seriesPrimary: string
   /** Secondary series color */
   seriesSecondary: string
@@ -41,7 +41,6 @@ function cssVars(): Record<string, string> {
     '--bg-surface': read('--bg-surface'),
     '--bg-app': read('--bg-app'),
     '--accent-primary': read('--accent-primary'),
-    '--gold': read('--gold'),
   }
 }
 
@@ -53,21 +52,19 @@ function toRgb(triplet: string | undefined, fallback: string): string {
 export function getChartTokens(): ChartTokens {
   const v = cssVars()
 
-  const light = document.documentElement.getAttribute('data-theme') !== 'dark'
-
   return {
     text: toRgb(v['--text-secondary'], '#94A3B8'),
     legend: toRgb(v['--text-tertiary'], '#64748B'),
     axisLabel: toRgb(v['--text-tertiary'], '#64748B'),
     axisLine: toRgb(v['--border-default'], '#334155'),
-    splitLine: light ? '#E2E8F0' : '#16202F',
-    tooltipBg: light ? '#FFFFFF' : '#161C25',
-    tooltipBorder: light ? '#CBD5E1' : '#252C37',
-    tooltipText: light ? '#0F1F37' : '#F1F5F9',
+    splitLine: '#E2E8F0',
+    tooltipBg: '#FFFFFF',
+    tooltipBorder: '#CBD5E1',
+    tooltipText: '#0F1F37',
     seriesBorder: toRgb(v['--bg-surface'], '#11161E'),
-    seriesPrimary: light ? '#1D4ED8' : '#38BDF8',
-    seriesSecondary: light ? '#B08416' : '#818CF8',
-    seriesTertiary: light ? '#0E7490' : '#34D399',
+    seriesPrimary: '#243B6B',
+    seriesSecondary: '#5B7DB1',
+    seriesTertiary: '#2F7F8F',
   }
 }
 
