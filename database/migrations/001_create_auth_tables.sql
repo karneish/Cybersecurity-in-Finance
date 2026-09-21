@@ -27,15 +27,38 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON auth.audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON auth.audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON auth.audit_logs(created_at DESC);
 
--- Seed default admin user (password: admin123 — BCrypt hash)
+-- Seed the three SCRO demo users.
+--   scro_regulator -> CISO  (regulatory oversight / national access)
+--   scro_banker     -> ANALYST (sector operations)
+--   scro_auditor    -> ANALYST (national audit & assurance)
+-- Password for all three accounts is: Scro@2026!
 INSERT INTO auth.users (username, email, password_hash, full_name, role)
-VALUES ('admin', 'admin@cyberrisk.local', '$2a$10$8SSZvkJUyWc.SmHgtbxD3ueJiTYl3dtgeumA/55D6R1oIwfqBUgjy', 'System Admin', 'ADMIN')
-ON CONFLICT (username) DO NOTHING;
+VALUES ('scro_regulator', 'regulator@scro.gov.in', '$2b$10$iiW3oECAzxyM1Mh674EVle..tTrqD4Rv141BmywmZgmjvFITKi8oW', 'Regulatory Oversight', 'CISO')
+ON CONFLICT (username) DO UPDATE SET
+  email = EXCLUDED.email,
+  password_hash = EXCLUDED.password_hash,
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role,
+  is_active = true;
 
 INSERT INTO auth.users (username, email, password_hash, full_name, role)
-VALUES ('ciso', 'ciso@cyberrisk.local', '$2a$10$8SSZvkJUyWc.SmHgtbxD3ueJiTYl3dtgeumA/55D6R1oIwfqBUgjy', 'Chief InfoSec Officer', 'CISO')
-ON CONFLICT (username) DO NOTHING;
+VALUES ('scro_banker', 'banker@scro.gov.in', '$2b$10$iiW3oECAzxyM1Mh674EVle..tTrqD4Rv141BmywmZgmjvFITKi8oW', 'Banking Sector Officer', 'ANALYST')
+ON CONFLICT (username) DO UPDATE SET
+  email = EXCLUDED.email,
+  password_hash = EXCLUDED.password_hash,
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role,
+  is_active = true;
 
 INSERT INTO auth.users (username, email, password_hash, full_name, role)
-VALUES ('analyst', 'analyst@cyberrisk.local', '$2a$10$8SSZvkJUyWc.SmHgtbxD3ueJiTYl3dtgeumA/55D6R1oIwfqBUgjy', 'Security Analyst', 'ANALYST')
-ON CONFLICT (username) DO NOTHING;
+VALUES ('scro_auditor', 'auditor@scro.gov.in', '$2b$10$iiW3oECAzxyM1Mh674EVle..tTrqD4Rv141BmywmZgmjvFITKi8oW', 'National Security Auditor', 'ANALYST')
+ON CONFLICT (username) DO UPDATE SET
+  email = EXCLUDED.email,
+  password_hash = EXCLUDED.password_hash,
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role,
+  is_active = true;
+
+-- Only the three SCRO demo users may log in — any legacy user is disabled.
+UPDATE auth.users SET is_active = false
+WHERE username IN ('admin', 'ciso', 'analyst');
