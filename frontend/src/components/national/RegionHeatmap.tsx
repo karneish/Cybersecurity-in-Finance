@@ -61,7 +61,7 @@ export default function RegionHeatmap() {
       orient: 'horizontal',
       left: 'center',
       bottom: 0,
-      inRange: { color: ['#16202F', '#334155', '#4f46e5', '#f59e0b', '#ef4444'] },
+      inRange: { color: ['#E4EAF2', '#9DB4CE', '#5B7DB1', '#33537F', '#132C50'] },
       textStyle: { color: t.axisLabel },
     },
     series: [
@@ -70,7 +70,9 @@ export default function RegionHeatmap() {
         data: regions.matrix,
         label: {
           show: true,
-          color: '#E2E8F0',
+          color: '#FFFFFF',
+          textShadowColor: 'rgba(18, 32, 54, 0.55)',
+          textShadowBlur: 6,
           fontSize: 10,
           formatter: (p: { value: number[] }) => {
             const v: number = p.value[2]
@@ -86,7 +88,7 @@ export default function RegionHeatmap() {
   }
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="region-heatmap">
       <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-text-primary">
         <Map className="h-4 w-4 text-text-secondary" />
         Regional Exposure Heatmap
