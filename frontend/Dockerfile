@@ -4,7 +4,9 @@ COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
 ARG VITE_API_BASE_URL=/api
-ARG VITE_WS_URL=ws://localhost:3000/ws/
+# Empty VITE_WS_URL → the client derives ws(s)://<host>/ws from window.location,
+# so the same image works on localhost and any public deployment.
+ARG VITE_WS_URL=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_WS_URL=$VITE_WS_URL
 RUN npm run build
