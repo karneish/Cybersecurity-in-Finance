@@ -1,8 +1,6 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
-import { useNotificationStore } from '@/store/notificationStore'
-import { useToastStore } from '@/store/toastStore'
 import { useRiskStore } from '@/store/riskStore'
 import { useWebSocket, type WSMessage } from '@/hooks/useWebSocket'
 import { hasAccess, getDefaultRoute, PAGE_ACCESS } from '@/config/roles'
@@ -21,39 +19,19 @@ import AIAssistant from '@/pages/AIAssistant'
 import Settings from '@/pages/Settings'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 
-type RiskUpdate = {
-  assetId?: string
-  assetName?: string
-  message?: string
-  delta?: number
-  currentRisk?: number
-  previousRisk?: number
-}
-
 function pageFor(path: string) {
   return PAGE_ACCESS.find((p) => p.path === path) ?? PAGE_ACCESS[0]
 }
 
 function handleLiveMessage(msg: WSMessage) {
-  const notifications = useNotificationStore.getState()
-  const toasts = useToastStore.getState()
   const risk = useRiskStore.getState()
 
   if (msg.type === 'risk:updated') {
-    const p = msg.payload as RiskUpdate
-    const title = p.assetName || p.assetId || 'asset'
-    const delta = typeof p.delta === 'number' ? p.delta : 0
-    const message =
-      p.message || `Risk changed by ₹${delta.toLocaleString('en-IN')} for ${title}`
-    notifications.addNotification(delta > 0 ? 'warning' : 'success', message)
-    toasts.addToast(delta > 0 ? 'warning' : 'success', message)
     risk.fetchRiskScore()
     risk.fetchEAL()
     risk.fetchTrends()
   } else if (msg.type === 'ingestion:event') {
-    const message = 'New security event ingested'
-    notifications.addNotification('info', message)
-    toasts.addToast('info', message)
+    /* no-op: ingestion events refresh on navigation */
   }
 }
 
