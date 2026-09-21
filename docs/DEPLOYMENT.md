@@ -35,7 +35,7 @@ All variables are listed in `.env.example`. Key groups:
 | Auth | `JWT_SECRET`, `JWT_EXPIRY`, `JWT_REFRESH_EXPIRY` |
 | LLM | `USE_MOCK_LLM`, `OPENAI_API_KEY` |
 | Gateway | `GATEWAY_ORIGIN_WHITELIST` |
-| Frontend | `VITE_WS_URL` (build arg, default `ws://localhost:3000/ws/`) |
+| Frontend | `VITE_WS_URL` (build-arg override; default empty → same-origin derived `ws(s)://<host>/ws`) |
 
 ## Smoke test
 
