@@ -48,7 +48,7 @@ export default function DataSourcesPanel() {
   const connected = sources.filter((s) => s.status === 'CONNECTED' || s.status === 'ACTIVE').length
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="data-sources">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
           <Database className="h-4 w-4 text-accent-primary" />
