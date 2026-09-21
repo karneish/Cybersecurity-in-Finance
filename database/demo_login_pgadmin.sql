@@ -9,7 +9,8 @@
 --   4. Paste this whole script and press F5 / Execute
 --
 -- This creates the auth schema + users/audit_logs tables (if missing) and
--- inserts the three demo users. Safe to re-run (idempotent).
+-- seeds exactly the three SCRO demo users, disabling every other account.
+-- Safe to re-run (idempotent).
 -- ============================================================================
 
 CREATE SCHEMA IF NOT EXISTS auth;
@@ -37,17 +38,36 @@ CREATE TABLE IF NOT EXISTS auth.audit_logs (
     created_at      TIMESTAMP DEFAULT NOW()
 );
 
--- Demo users — password for ALL three accounts is: admin123
+-- Demo users — password for ALL three accounts is: Scro@2026!
 INSERT INTO auth.users (username, email, password_hash, full_name, role)
-VALUES
-('admin',   'admin@cyberrisk.local',   '$2a$10$8SSZvkJUyWc.SmHgtbxD3ueJiTYl3dtgeumA/55D6R1oIwfqBUgjy', 'System Admin',          'ADMIN'),
-('ciso',    'ciso@cyberrisk.local',    '$2a$10$8SSZvkJUyWc.SmHgtbxD3ueJiTYl3dtgeumA/55D6R1oIwfqBUgjy', 'Chief InfoSec Officer', 'CISO'),
-('analyst', 'analyst@cyberrisk.local', '$2a$10$8SSZvkJUyWc.SmHgtbxD3ueJiTYl3dtgeumA/55D6R1oIwfqBUgjy', 'Security Analyst',      'ANALYST')
+VALUES ('scro_regulator', 'regulator@scro.gov.in', '$2b$10$iiW3oECAzxyM1Mh674EVle..tTrqD4Rv141BmywmZgmjvFITKi8oW', 'Regulatory Oversight', 'CISO')
 ON CONFLICT (username) DO UPDATE SET
+  email = EXCLUDED.email,
   password_hash = EXCLUDED.password_hash,
-  full_name     = EXCLUDED.full_name,
-  role          = EXCLUDED.role,
-  is_active     = true;
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role,
+  is_active = true;
 
--- Sanity check — expect 3 rows
+INSERT INTO auth.users (username, email, password_hash, full_name, role)
+VALUES ('scro_banker', 'banker@scro.gov.in', '$2b$10$iiW3oECAzxyM1Mh674EVle..tTrqD4Rv141BmywmZgmjvFITKi8oW', 'Banking Sector Officer', 'ANALYST')
+ON CONFLICT (username) DO UPDATE SET
+  email = EXCLUDED.email,
+  password_hash = EXCLUDED.password_hash,
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role,
+  is_active = true;
+
+INSERT INTO auth.users (username, email, password_hash, full_name, role)
+VALUES ('scro_auditor', 'auditor@scro.gov.in', '$2b$10$iiW3oECAzxyM1Mh674EVle..tTrqD4Rv141BmywmZgmjvFITKi8oW', 'National Security Auditor', 'ANALYST')
+ON CONFLICT (username) DO UPDATE SET
+  email = EXCLUDED.email,
+  password_hash = EXCLUDED.password_hash,
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role,
+  is_active = true;
+
+UPDATE auth.users SET is_active = false
+WHERE username IN ('admin', 'ciso', 'analyst');
+
+-- Sanity check — expect exactly 3 active users
 SELECT username, role, is_active FROM auth.users ORDER BY username;
