@@ -47,7 +47,7 @@ export default function InvestmentOptimizer() {
 
       <InvestmentCurveChart onBudgetSelect={(b) => setBudget(b)} />
 
-      <div className="cyber-card p-6">
+      <div className="cyber-card p-6" data-tour="budget-config">
         <h2 className="mb-4 text-sm font-semibold text-text-primary">Budget Configuration</h2>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           <div className="flex-1">
@@ -203,7 +203,7 @@ export default function InvestmentOptimizer() {
         </>
       )}
 
-      <div className="cyber-card">
+      <div className="cyber-card" data-tour="available-controls">
         <div className="border-b border-border-subtle px-6 py-4">
           <h3 className="text-sm font-semibold text-text-primary">Available Security Controls</h3>
         </div>
