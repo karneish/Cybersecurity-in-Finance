@@ -34,7 +34,7 @@ export default function AttackPathPanel() {
   if (!path) return null
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="attack-path">
       <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
         <GitBranch className="h-4 w-4 text-accent-primary" />
         Crown-Jewel Attack Path
