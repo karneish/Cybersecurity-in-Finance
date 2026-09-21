@@ -68,9 +68,9 @@ export default function InvestmentCurveChart({ onBudgetSelect }: InvestmentCurve
         {
           type: 'value',
           name: 'ROSI %',
-          nameTextStyle: { fontSize: 11, color: '#34D399' },
+          nameTextStyle: { fontSize: 11, color: '#2F7D52' },
           splitLine: { show: false },
-          axisLabel: { fontSize: 10, color: '#FBBF24', formatter: '{value}%' },
+          axisLabel: { fontSize: 10, color: '#2F7D52', formatter: '{value}%' },
         },
       ],
       series: [
@@ -89,8 +89,8 @@ export default function InvestmentCurveChart({ onBudgetSelect }: InvestmentCurve
           smooth: true,
           symbol: 'circle',
           symbolSize: 5,
-          lineStyle: { color: '#FBBF24', width: 2 },
-          itemStyle: { color: '#FBBF24' },
+          lineStyle: { color: '#2F7D52', width: 2 },
+          itemStyle: { color: '#2F7D52' },
         },
       ],
     }
@@ -118,7 +118,7 @@ export default function InvestmentCurveChart({ onBudgetSelect }: InvestmentCurve
   }
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="investment-curve">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
           <Activity className="h-4 w-4 text-accent-primary" />
