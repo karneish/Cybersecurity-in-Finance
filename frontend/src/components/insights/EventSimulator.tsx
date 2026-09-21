@@ -63,7 +63,7 @@ export default function EventSimulator() {
   const assetLabel = (a: Asset) => `${a.name} (${a.asset_type})`
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="event-simulator">
       <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
         <Radio className="h-4 w-4 text-status-critical" />
         Event Simulator (Live Demo Loop)
