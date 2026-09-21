@@ -87,6 +87,12 @@ function connect() {
           listeners.forEach((cb) => cb({ type: 'ingestion:event', payload }))
         } catch {}
       })
+      client?.subscribe('/topic/risk/alert', (message) => {
+        try {
+          const payload = JSON.parse(message.body)
+          listeners.forEach((cb) => cb({ type: 'alert', payload }))
+        } catch {}
+      })
     },
     onWebSocketClose: () => {
       reconnectAttempts += 1
