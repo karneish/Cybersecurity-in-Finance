@@ -1,178 +1,38 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { getDefaultRoute } from "@/config/roles";
-import { Eye, EyeOff, Landmark, Shield } from "lucide-react";
+import { Eye, EyeOff, Landmark, Shield, LineChart, Target, BadgeCheck } from "lucide-react";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 
 const inputClass =
   "h-10 w-full rounded-[6px] border border-border-default bg-bg-input px-3 text-sm text-text-primary placeholder:text-text-tertiary transition-colors duration-150 focus:border-accent-primary focus:outline-none focus:ring-1 focus:ring-accent-primary";
 
-const DEMO_PASSWORD = "admin123";
+const DEMO_PASSWORD = "Scro@2026!";
 
 const DEMO_ACCOUNTS = [
-  { username: "admin", role: "System Admin", badge: "A", accent: "text-accent-primary", bg: "bg-accent-primary/15" },
-  { username: "ciso", role: "Chief InfoSec Officer", badge: "C", accent: "text-status-high", bg: "bg-status-high/15" },
-  { username: "analyst", role: "Security Analyst", badge: "A", accent: "text-status-low", bg: "bg-status-low/15" },
+  { username: "scro_regulator", role: "Regulatory Oversight · National CISO", badge: "R", accent: "text-accent-primary", bg: "bg-accent-primary/15" },
+  { username: "scro_banker", role: "Sector Operations · Banking Officer", badge: "B", accent: "text-status-high", bg: "bg-status-high/15" },
+  { username: "scro_auditor", role: "National Audit & Assurance", badge: "A", accent: "text-status-low", bg: "bg-status-low/15" },
 ];
 
-const NAVY_PANEL = {
-  tile: [
-    { value: "₹4.6L Cr", label: "Modelled Exposure" },
-    { value: "8", label: "Critical Sectors" },
-    { value: "1,240", label: "Events / Month" },
-  ],
-};
-
-const animationCss = `
-@keyframes crtFadeSlideUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes crtFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes orbDriftA {
-  0%   { transform: translate3d(0, 0, 0) scale(1); }
-  50%  { transform: translate3d(6vw, -5vh, 0) scale(1.15); }
-  100% { transform: translate3d(-4vw, 4vh, 0) scale(0.92); }
-}
-@keyframes orbDriftB {
-  0%   { transform: translate3d(0, 0, 0) scale(1.05); }
-  50%  { transform: translate3d(-5vw, 4vh, 0) scale(0.9); }
-  100% { transform: translate3d(5vw, -4vh, 0) scale(1.12); }
-}
-.crt-fade-up { animation: crtFadeSlideUp 0.22s ease both; }
-.crt-fade-in { animation: crtFadeIn 0.2s ease both; }
-.orb-a { animation: orbDriftA 44s ease-in-out infinite; }
-.orb-b { animation: orbDriftB 58s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) {
-  .orb-a, .orb-b { animation: none; }
-}
-`;
-
-type Particle = {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  r: number;
-  hue: string;
-};
-
-function ParticleField() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let raf = 0;
-    let width = 0;
-    let height = 0;
-    let particles: Particle[] = [];
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    const LINK_DIST = 110;
-    const LINK_DIST_SQ = LINK_DIST * LINK_DIST;
-
-    const setupParticles = () => {
-      const target = Math.min(90, Math.floor((width * height) / 16000));
-      particles = Array.from({ length: target }, () => ({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 0.28,
-        vy: (Math.random() - 0.5) * 0.28,
-        r: Math.random() * 1.3 + 0.6,
-        hue: Math.random() < 0.75 ? "#38BDF8" : "#F0C766",
-      }));
-    };
-
-    const resize = () => {
-      width = window.innerWidth;
-      height = window.innerHeight;
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      setupParticles();
-    };
-
-    const step = () => {
-      ctx.clearRect(0, 0, width, height);
-      const n = particles.length;
-
-      for (let i = 0; i < n; i++) {
-        const p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        if (p.x < -10) p.x = width + 10;
-        else if (p.x > width + 10) p.x = -10;
-        if (p.y < -10) p.y = height + 10;
-        else if (p.y > height + 10) p.y = -10;
-      }
-
-      ctx.lineWidth = 1;
-      for (let i = 0; i < n; i++) {
-        const a = particles[i];
-        for (let j = i + 1; j < n; j++) {
-          const b = particles[j];
-          const dx = a.x - b.x;
-          const dy = a.y - b.y;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < LINK_DIST_SQ) {
-            const t = 1 - Math.sqrt(d2) / LINK_DIST;
-            ctx.strokeStyle = `rgba(240, 199, 102, ${(t * 0.12).toFixed(3)})`;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.stroke();
-          }
-        }
-      }
-
-      for (let i = 0; i < n; i++) {
-        const p = particles[i];
-        ctx.globalAlpha = 0.5;
-        ctx.fillStyle = p.hue;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-
-      raf = requestAnimationFrame(step);
-    };
-
-    const onVisibility = () => {
-      if (document.hidden) cancelAnimationFrame(raf);
-      else {
-        cancelAnimationFrame(raf);
-        raf = requestAnimationFrame(step);
-      }
-    };
-
-    resize();
-    raf = requestAnimationFrame(step);
-    window.addEventListener("resize", resize);
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 h-full w-full"
-      aria-hidden="true"
-    />
-  );
-}
+const FEATURES = [
+  {
+    icon: LineChart,
+    title: "National Exposure Modelling",
+    detail: "Continuous loss-distribution scanning across 8 critical financial sectors.",
+  },
+  {
+    icon: Target,
+    title: "Loss Forecasting & Attribution",
+    detail: "Scenario simulation and attack-path analysis for informed defence.",
+  },
+  {
+    icon: BadgeCheck,
+    title: "Audited Investment Steering",
+    detail: "Budget optimisation with a tamper-evident audit chain for every decision.",
+  },
+];
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -214,84 +74,71 @@ export default function LoginPage() {
     username === u && password === DEMO_PASSWORD;
 
   return (
-    <div className="relative flex min-h-screen overflow-hidden bg-bg-app">
-      <style>{animationCss}</style>
-
+    <div className="flex min-h-screen bg-bg-app">
       {/* Sovereign navy panel */}
-      <div className="relative hidden w-[46%] overflow-hidden text-white lg:block">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#060F22] via-[#0A1B38] to-[#10294E]" />
-        <div className="sovereign-grid absolute inset-0 opacity-40" />
-        <div className="pointer-events-none absolute -left-24 top-[-14%] h-[460px] w-[460px] rounded-full bg-[#F0C766]/10 blur-[100px] orb-a" />
-        <div className="pointer-events-none absolute bottom-[-16%] right-[-10%] h-[420px] w-[420px] rounded-full bg-[#2F8DFF]/20 blur-[110px] orb-b" />
-        <ParticleField />
-
-        <div className="relative z-10 flex h-full flex-col justify-between p-12 xl:p-16">
-          <div className="crt-fade-up">
+      <div className="relative hidden w-[42%] overflow-hidden bg-bg-masthead text-white lg:block">
+        <div className="flex h-full flex-col justify-between px-10 py-10 xl:px-14">
+          <div>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#F0C766]/40 bg-white/5">
-                <Landmark className="h-5 w-5 text-[#F0C766]" strokeWidth={1.75} />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/15 bg-white/[0.07]">
+                <Landmark className="h-5 w-5 text-white/90" strokeWidth={1.75} />
               </div>
               <div className="leading-tight">
                 <p className="text-sm font-semibold tracking-wide">
                   Sovereign Cyber-Risk Observatory
                 </p>
-                <p className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.22em] text-[#F0C766]">
+                <p className="mt-0.5 text-[9px] font-medium uppercase tracking-[0.22em] text-white/50">
                   National Financial-Security Programme
                 </p>
               </div>
             </div>
-            <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-[#F0C766]/25 bg-white/[0.04] px-3 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#34D399] shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#F0C766]">
-                Classified · Government Use
+
+            <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-3 py-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-status-live" />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
+                Authorised Government Use
               </span>
             </div>
           </div>
 
-          <div className="crt-fade-in max-w-xl">
-            <h1 className="text-[34px] font-semibold leading-tight tracking-tight">
-              Command the cyber risk of your{" "}
-              <span className="text-gradient-gold">nation's critical finance.</span>
+          <div className="max-w-md">
+            <h1 className="text-[30px] font-semibold leading-tight tracking-tight">
+              A single observatory for the nation&apos;s financial cyber risk.
             </h1>
-            <p className="mt-4 max-w-md text-[15px] leading-relaxed text-white/60">
-              One sovereign observatory for modelling exposure, forecasting
-              impact, and steering investment — from boardroom to command
-              room.
+            <p className="mt-4 text-[14px] leading-relaxed text-white/55">
+              Model exposure, forecast impact, and steer investment —
+              from the boardroom to the command room.
             </p>
 
-            <div className="mt-10 grid max-w-md grid-cols-3 gap-3">
-              {NAVY_PANEL.tile.map((t) => (
-                <div
-                  key={t.label}
-                  className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 backdrop-blur-sm"
-                >
-                  <p className="text-lg font-semibold text-[#F0C766]">
-                    {t.value}
-                  </p>
-                  <p className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-white/50">
-                    {t.label}
-                  </p>
+            <div className="mt-10 space-y-5">
+              {FEATURES.map((f) => (
+                <div key={f.title} className="flex gap-3.5">
+                  <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.05]">
+                    <f.icon className="h-4 w-4 text-white/80" strokeWidth={1.75} />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-semibold text-white/90">{f.title}</p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-white/50">{f.detail}</p>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="crt-fade-up flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-white/40">
-            <Shield className="h-3.5 w-3.5 text-[#F0C766]/70" />
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-white/40">
+            <Shield className="h-3.5 w-3.5 text-white/50" />
             Standards-aligned · CERT-In · RBI · NCIIPC
           </div>
         </div>
       </div>
 
       {/* Auth pane */}
-      <div className="relative z-10 flex flex-1 items-center justify-center px-4 py-10 sm:px-6">
+      <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6">
         <div className="w-full max-w-[400px]">
-          <div className="crt-fade-up mb-8 text-center lg:hidden">
-            <img
-              src="/logo.png"
-              alt="CyberRisk Twin"
-              className="mx-auto h-auto w-[170px]"
-            />
+          <div className="mb-8 text-center lg:hidden">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-bg-masthead text-white">
+              <Landmark className="h-6 w-6" strokeWidth={1.75} />
+            </div>
             <h1 className="mt-3 text-base font-semibold tracking-tight text-text-primary">
               Sovereign Cyber-Risk Observatory
             </h1>
@@ -300,11 +147,11 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div className="crt-fade-in rounded-[14px] border border-border-default bg-bg-surface p-8 shadow-modal">
+          <div className="rounded-[14px] border border-border-default bg-bg-surface p-8 shadow-modal">
             <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-gold" />
-              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
-                Secure Access · Govt Credentials
+              <Shield className="h-4 w-4 text-accent-primary" />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-primary">
+                Secure Access · Approved Credentials
               </span>
             </div>
 
@@ -323,8 +170,8 @@ export default function LoginPage() {
                       onClick={() => handleDemoLogin(acc)}
                       className={`flex w-full cursor-pointer items-center gap-3 rounded-[8px] border px-3 py-2.5 text-left transition-all duration-150 ${
                         active
-                          ? "border-gold/60 bg-gold/10"
-                          : "border-border-default bg-bg-surface hover:border-gold/40 hover:bg-bg-hover"
+                          ? "border-accent-primary bg-accent-primary/10"
+                          : "border-border-default bg-bg-surface hover:border-accent-primary/50 hover:bg-bg-hover"
                       } disabled:cursor-not-allowed disabled:opacity-60`}
                     >
                       <span
@@ -431,12 +278,12 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex h-10 w-full items-center justify-center gap-2 rounded-[6px] bg-gold text-[13px] font-semibold text-[#071226] shadow-gold transition-all duration-150 hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-[6px] bg-accent-primary text-[13px] font-semibold text-white transition-all duration-150 hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? (
                   <LoadingSpinner
                     size="sm"
-                    className="border-[#071226] border-t-transparent"
+                    className="border-white border-t-transparent"
                   />
                 ) : null}
                 Access Dashboard →
@@ -444,7 +291,7 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-8 flex items-center justify-center gap-1.5 border-t border-border-subtle pt-5">
-              <span className="h-1.5 w-1.5 rounded-full bg-status-live shadow-[0_0_6px_rgba(4,150,106,0.9)]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-status-live" />
               <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-text-tertiary">
                 System Operational
               </span>
