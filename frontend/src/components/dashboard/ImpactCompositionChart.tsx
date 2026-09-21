@@ -6,10 +6,10 @@ import { useChartTokens } from '@/theme/chartTokens'
 import type { EALResult } from '@/types/risk'
 
 const COMPONENT_META: Record<string, { label: string; color: string }> = {
-  downtime: { label: 'Downtime / Availability', color: '#818CF8' },
-  breach: { label: 'Breach / Data Loss', color: '#F43F5E' },
-  regulatory: { label: 'Regulatory Fines', color: '#FBBF24' },
-  reputational: { label: 'Reputational Damage', color: '#34D399' },
+  downtime: { label: 'Downtime / Availability', color: '#5B7DB1' },
+  breach: { label: 'Breach / Data Loss', color: '#B8393F' },
+  regulatory: { label: 'Regulatory Fines', color: '#A16207' },
+  reputational: { label: 'Reputational Damage', color: '#2F7D52' },
 }
 
 function formatINR(value: number): string {
