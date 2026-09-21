@@ -35,7 +35,7 @@ Role filtering happens server-side on every API endpoint and client-side for nav
 
 ## WebSocket connection
 
-`VITE_WS_URL` is a build-time env var. Defaults to `ws://localhost:3000/ws/` (same-origin via nginx proxy). When running Vite dev server, it proxies to `localhost:8086` via `vite.config.ts`.
+`VITE_WS_URL` is a build-time env var. Leave it empty (default) so the client derives `ws(s)://<host>/ws` from the page origin — handled by nginx proxy in production and the Vite dev proxy (`localhost:8086`) in development. Set it explicitly only to override.
 
 ## Production build
 
