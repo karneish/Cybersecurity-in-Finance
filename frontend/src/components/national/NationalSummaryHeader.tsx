@@ -29,7 +29,7 @@ export default function NationalSummaryHeader() {
   const topSector = summary.top_sectors?.[0]
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="national-summary">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-md bg-accent-primary/15">
