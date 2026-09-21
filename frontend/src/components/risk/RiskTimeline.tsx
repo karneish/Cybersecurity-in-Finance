@@ -58,7 +58,7 @@ export default function RiskTimeline({ data }: RiskTimelineProps) {
   }
 
   return (
-    <div className="cyber-card p-6">
+    <div className="cyber-card p-6" data-tour="risk-timeline">
       <h3 className="mb-4 text-sm font-semibold text-text-primary">Risk Score Timeline</h3>
       <EChart option={option} height={300} />
     </div>
