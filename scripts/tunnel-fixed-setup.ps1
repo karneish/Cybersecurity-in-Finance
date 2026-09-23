@@ -35,6 +35,7 @@ param(
     [string]$ConfigDir = "",
     [string]$LogDir = "",
     [string]$ApiToken = "",
+    [string]$AccountId = "",
     [switch]$CheckOnly,
     [switch]$Force
 )
@@ -110,10 +111,18 @@ if ($ApiToken) {
     # ─── 1a. ZONE-LESS: authenticate + find account via API ─────────────────
     Write-Step "[1/5] Authenticating via API token (zone-less mode)"
     $apiHeaders = @{ Authorization = "Bearer $ApiToken" }
-    $accounts = (Invoke-CF GET "/accounts").result
-    if (-not $accounts) { Write-Err "Token is valid but no accounts found."; exit 1 }
-    $accountId = $accounts[0].id
-    Write-Ok "Account: $($accounts[0].name) (id $accountId)"
+    if (-not $AccountId) {
+        $accounts = (Invoke-CF GET "/accounts").result
+        if (-not $accounts) {
+            Write-Err "The token is valid but reveals no account (no Account read permission)."
+            Write-Err "Copy your Account ID from https://dash.cloudflare.com (URL shows /<ACCOUNT_ID>) or"
+            Write-Err "from the right sidebar 'Account ID' on the Overview page, then re-run with:"
+            Write-Err "   -ApiToken ... -AccountId <ACCOUNT_ID>"
+            exit 1
+        }
+        $AccountId = $accounts[0].id
+    }
+    Write-Ok "Account ID: $AccountId"
 
     # ─── 2a. Find or create the named tunnel (remotely-managed) ────────────
     Write-Step "[2/5] Named tunnel '$TunnelName'"

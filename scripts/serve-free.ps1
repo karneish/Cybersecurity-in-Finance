@@ -26,6 +26,10 @@
 #   # force the random URL even if a fixed tunnel is configured:
 #   powershell -ExecutionPolicy Bypass -File scripts\serve-free.ps1 -ForceQuick
 #
+#   # skip the https://hostname/health check (use while the is-a.dev DNS/CNAME
+#   # is still pending review -- otherwise DNS can't resolve yet):
+#   powershell -ExecutionPolicy Bypass -File scripts\serve-free.ps1 -SkipHealth
+#
 # No services are installed, nothing starts on boot, and your OS/settings are
 # untouched. Closing the terminal (or Ctrl+C) takes the site offline and your
 # PC is exactly as it was before.
@@ -37,7 +41,8 @@ param(
     [string]$ConfigDir = "",
     [string]$TunnelName = "cyberrisk",
     [string]$Hostname = "cyberrisk.is-a.dev",
-    [switch]$ForceQuick
+    [switch]$ForceQuick,
+    [switch]$SkipHealth
 )
 
 $ErrorActionPreference = "Stop"
@@ -116,11 +121,16 @@ if ($useFixed) {
 
     # Named tunnels don't print a random URL; verify reachability through DNS
     # instead (the CNAME must point at this tunnel's .cfargotunnel.com).
-    $deadline = (Get-Date).AddMinutes(2)
+    # Use -SkipHealth while the is-a.dev CNAME is still pending DNS.
     $healthy = $false
+    $deadline = (Get-Date).AddMinutes(2)
     while ((Get-Date) -lt $deadline) {
         if ($proc.HasExited) { break }
         Start-Sleep -Seconds 2
+        if ($SkipHealth) {
+            $healthy = $true
+            break
+        }
         try {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             $r = Invoke-WebRequest -Uri "https://$Hostname/health" -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop
