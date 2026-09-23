@@ -81,7 +81,7 @@ while ((Get-Date) -lt $deadline) {
     $combined = ""
     if (Test-Path -LiteralPath $logOut) { $combined += Get-Content $logOut -Raw }
     if (Test-Path -LiteralPath $logErr) { $combined += Get-Content $logErr -Raw }
-    $m = [regex]::Match($combined, "https://[a-z0-9\-]+\.trycloudflare\.com")
+    $m = [regex]::Match($combined, "https://(?!(?:api|edge|www)\.)[a-z0-9\-]{3,}\.trycloudflare\.com")
     if ($m.Success) { $url = $m.Value; break }
 }
 
@@ -110,14 +110,9 @@ try {
     if ($MaxSeconds -gt 0) {
         Start-Sleep -Seconds $MaxSeconds
     } else {
-        # Keep running with the tab open; Ctrl+C in this window ends it.
-        $cancel = $false
-        [Console]::CancelKeyPress.Add({
-            param($sender, $e)
-            $script:cancel = $true
-            $e.Cancel = $true
-        })
-        while (-not $script:cancel) {
+        # Keep the tab open; Ctrl+C ends the script and the finally block
+        # below stops cloudflared and restores your PC.
+        while ($true) {
             if ($proc.HasExited) { break }
             Start-Sleep -Seconds 2
         }
