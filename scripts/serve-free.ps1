@@ -97,7 +97,7 @@ if ($useFixed) {
     $logErr = Join-Path $LogDir "cloudflared-fixed.err.log"
     $proc = Start-Process `
         -FilePath $cloudflared `
-        -ArgumentList @("tunnel", "--no-autoupdate", "run", $tunnelName) `
+        -ArgumentList @("--no-autoupdate", "tunnel", "run", $tunnelName) `
         -RedirectStandardOutput $logOut `
         -RedirectStandardError $logErr `
         -PassThru -WindowStyle Hidden
@@ -133,7 +133,7 @@ if ($useFixed) {
 
     $proc = Start-Process `
         -FilePath $cloudflared `
-        -ArgumentList @("tunnel", "--url", "http://localhost:$Port", "--no-autoupdate") `
+        -ArgumentList @("--no-autoupdate", "tunnel", "--url", "http://localhost:$Port") `
         -RedirectStandardOutput $logOut `
         -RedirectStandardError $logErr `
         -PassThru -WindowStyle Hidden

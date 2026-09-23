@@ -67,7 +67,7 @@ if (-not (Test-Path -LiteralPath $certFile)) {
         exit 1
     }
     Write-Warn "No login found. Opening your browser -- please sign in / create a FREE Cloudflare account (no card needed) and click Allow."
-    & $cloudflared tunnel login --no-autoupdate
+    & $cloudflared --no-autoupdate tunnel login
     if (-not (Test-Path -LiteralPath $certFile)) {
         Write-Err "Login did not complete. Re-run this wizard and complete the browser step."
         exit 1
@@ -78,7 +78,7 @@ Write-Ok "Logged in to Cloudflare."
 # ─── 2. Create the named tunnel (idempotent) ───────────────────────────────
 Write-Step "[2/5] Named tunnel '$TunnelName'"
 $tunnelId = $null
-$listTxt = (& $cloudflared tunnel list --no-autoupdate 2>&1) -join "`n"
+$listTxt = (& $cloudflared --no-autoupdate tunnel list 2>&1) -join "`n"
 if ($listTxt -match [regex]::Escape($TunnelName)) {
     $m = [regex]::Match($listTxt, "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s+$([regex]::Escape($TunnelName))\b")
     if ($m.Success) { $tunnelId = $m.Groups[1].Value }
@@ -88,7 +88,7 @@ if ($listTxt -match [regex]::Escape($TunnelName)) {
         Write-Warn "Tunnel '$TunnelName' does not exist yet. Run the wizard without -CheckOnly to create it."
         exit 1
     }
-    $createTxt = (& $cloudflared tunnel create $TunnelName --no-autoupdate 2>&1) -join "`n"
+    $createTxt = (& $cloudflared --no-autoupdate tunnel create $TunnelName 2>&1) -join "`n"
     $m = [regex]::Match($createTxt, "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
     if ($m.Success) {
         $tunnelId = $m.Groups[1].Value
