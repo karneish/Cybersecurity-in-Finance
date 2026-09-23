@@ -1,5 +1,30 @@
 # Scripts
 
+## Live tunnel (free, public URL from your PC)
+
+Exposes the local Docker stack over the internet with Cloudflare — no router
+changes, no card, no server-ifying your laptop. Frontend on port 3000 is the
+single door (SPA + `/api/*` + `/ws`).
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/serve-free.ps1
+```
+
+- **Fixed mode** (default once configured): named tunnel + hostname, so the URL
+  is the same every run.
+- **Quick mode** (fallback): `https://<random>.trycloudflare.com`, changes on
+  restart. Force with `-ForceQuick`.
+- Press `Ctrl+C` to take it down; nothing is left running.
+
+One-time setup for a permanent free URL (`cyberrisk.is-a.dev` via is-a.dev):
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/tunnel-fixed-setup.ps1
+```
+
+Creates the named tunnel + ingress config, then prints the exact is-a.dev PR
+content and a check-only mode via `-CheckOnly`.
+
 ## Smoke test
 
 ```bash
@@ -30,6 +55,8 @@ Exports a gzipped SQL dump to `database/backups/<timestamp>.sql.gz`.
 
 | Script | Requirements |
 |---|---|
+| `serve-free.ps1` | PowerShell, Docker stack up on port 3000; fetches `cloudflared` into `%TEMP%\cloudflared` if absent |
+| `tunnel-fixed-setup.ps1` | PowerShell, `cloudflared` (auto-fetched), Cloudflare + GitHub logins |
 | `smoke_sacro.ps1` | PowerShell, `Invoke-WebRequest` (included in Windows) |
 | `backup_db.ps1` | PowerShell, `pg_dump` in PATH |
 | `backup_db.sh` | bash, `pg_dump` in PATH |
