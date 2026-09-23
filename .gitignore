@@ -44,6 +44,11 @@ database/backups/
 # Docker
 docker-compose.override.yml
 
+# Cloudflare tunnel secrets (stored in home dir, but keep out of git anyway)
+*.token
+cert.pem
+*.cfargotunnel.com
+
 # Testing
 coverage/
 htmlcov/

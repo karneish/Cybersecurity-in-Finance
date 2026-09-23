@@ -78,14 +78,26 @@ if (-not $LogDir) { $LogDir = Join-Path $env:TEMP "cyberrisk-tunnel" }
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 $useFixed = $false
+$tunnelCmdArgs = $null
 $configFile = Join-Path $ConfigDir "config.yml"
-if (-not $ForceQuick -and (Test-Path -LiteralPath $configFile)) {
-    $cfg = Get-Content $configFile -Raw -ErrorAction SilentlyContinue
-    if ($cfg -match "(?m)^\s*tunnel:\s*(\S+)") {
+$tokenFile = Join-Path $ConfigDir "$TunnelName.token"
+if (-not $ForceQuick) {
+    if (Test-Path -LiteralPath $tokenFile) {
         $useFixed = $true
-        $tunnelName = $Matches[1]
-        if ($cfg -match "(?m)^\s*(?:-\s*)?hostname:\s*(\S+)") { $Hostname = $Matches[1] }
-        else { $Hostname = "$Hostname (open config.yml to read the hostname)" }
+        $runToken = (Get-Content $tokenFile -Raw).Trim()
+        $tunnelCmdArgs = @("--no-autoupdate", "tunnel", "run", "--token", $runToken)
+        $hFile = Join-Path $ConfigDir "hostname.txt"
+        if (Test-Path -LiteralPath $hFile) { $Hostname = (Get-Content $hFile -Raw).Trim() }
+        Write-Ok "Token-based fixed mode detected ($tokenFile)."
+    } elseif (Test-Path -LiteralPath $configFile) {
+        $cfg = Get-Content $configFile -Raw -ErrorAction SilentlyContinue
+        if ($cfg -match "(?m)^\s*tunnel:\s*(\S+)") {
+            $useFixed = $true
+            $tunnelName = $Matches[1]
+            $tunnelCmdArgs = @("--no-autoupdate", "tunnel", "run", $tunnelName)
+            if ($cfg -match "(?m)^\s*(?:-\s*)?hostname:\s*(\S+)") { $Hostname = $Matches[1] }
+            else { $Hostname = "$Hostname (open config.yml to read the hostname)" }
+        }
     }
 }
 
@@ -97,7 +109,7 @@ if ($useFixed) {
     $logErr = Join-Path $LogDir "cloudflared-fixed.err.log"
     $proc = Start-Process `
         -FilePath $cloudflared `
-        -ArgumentList @("--no-autoupdate", "tunnel", "run", $tunnelName) `
+        -ArgumentList $tunnelCmdArgs `
         -RedirectStandardOutput $logOut `
         -RedirectStandardError $logErr `
         -PassThru -WindowStyle Hidden
