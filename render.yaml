@@ -52,7 +52,7 @@ services:
     dockerfilePath: ./deploy/render/Dockerfile
     dockerContext: .
     healthCheckPath: /health
-    autoDeployTrigger: true
+    autoDeployTrigger: commit
     envVars:
       # Managed Postgres + Redis, wired automatically by Render.
       - key: DATABASE_URL
