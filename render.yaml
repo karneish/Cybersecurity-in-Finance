@@ -1,0 +1,117 @@
+# ────────────────────────────────────────────────────────────────────────────
+# CyberRisk Quantifier — Render Blueprint (backend as a service)
+#
+# ONE web service deploys the entire backend (api-gateway + 9 microservices)
+# behind a single public HTTPS URL, exactly mirroring the local compose stack:
+#
+#   https://<your-service>.onrender.com/api/*   → gateway (JWT/rate-limit/route)
+#   https://<your-service>.onrender.com/ws      → STOMP WebSocket broker
+#   https://<your-service>.onrender.com/health  → gateway (Render health check)
+#
+# The Blueprint also provisions the managed PostgreSQL database and the Redis
+# (Key Value) instance and wires their connection strings automatically.
+#
+# Deploy (2 options):
+#   1. Render Dashboard → "New +" → "Blueprint" → select this repository.
+#   2. (NO render.yaml) create the three resources manually per deploy/render/README.md.
+#
+# On the first sync Render prompts you for two values:
+#   - JWT_SECRET            → set a long random string
+#   - CORS_ORIGINS          → MUST be a JSON array string (the gateway parses
+#                             it with json.loads), e.g.
+#                             '["https://cyberrisk.vercel.app","http://localhost:3000"]'
+#   - OPENAI_API_KEY        → optional; leave empty to keep the offline mock LLM.
+#
+# Instance sizes below are the safe minimum; the stack (numpy/scipy/xgboost/
+# ortools + ten processes) is RAM hungry — if you hit OOM restarts, bump the
+# web service plan to standard-plus (4 GB) or pro.
+# ────────────────────────────────────────────────────────────────────────────
+
+databases:
+  - name: cyberrisk-db
+    plan: basic-1gb
+    region: oregon
+    ipAllowList: []
+
+services:
+  # Redis-compatible Key Value store (rate limits, pub/sub, connector state).
+  - type: keyvalue
+    name: cyberrisk-redis
+    plan: starter
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
+  # The whole backend, one service.
+  - type: web
+    name: cyberrisk-backend
+    runtime: docker
+    plan: standard
+    region: oregon
+    rootDir: .
+    dockerfilePath: ./deploy/render/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: true
+    envVars:
+      # Managed Postgres + Redis, wired automatically by Render.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cyberrisk-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: cyberrisk-redis
+          type: keyvalue
+          property: connectionString
+
+      # Secrets (prompted on first sync).
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+
+      # App behaviour — identical defaults to the local .env so the deployed
+      # output is the same as running `docker compose up` today.
+      - key: JWT_EXPIRY
+        value: "900000"
+      - key: JWT_REFRESH_EXPIRY
+        value: "604800000"
+      - key: AUTH_ALLOW_REGISTER
+        value: "false"
+      - key: USE_MOCK_LLM
+        value: "true"
+      - key: LLM_MODEL
+        value: "gpt-4o"
+
+      # Keep pooled DB connections small — eight services share one Render
+      # Postgres instance, so the total pool budget must fit its connection cap.
+      - key: DB_POOL_SIZE
+        value: "2"
+      - key: DB_MAX_OVERFLOW
+        value: "2"
+      - key: DB_POOL_PRE_PING
+        value: "true"
+
+      # Internal service wiring is baked into the image (localhost); listed
+      # here explicitly for visibility and overrides.
+      - key: AUTH_SERVICE_URL
+        value: "http://127.0.0.1:8081"
+      - key: ASSET_SERVICE_URL
+        value: "http://127.0.0.1:8082"
+      - key: VULN_SERVICE_URL
+        value: "http://127.0.0.1:8083"
+      - key: CONTROL_SERVICE_URL
+        value: "http://127.0.0.1:8084"
+      - key: INGESTION_SERVICE_URL
+        value: "http://127.0.0.1:8085"
+      - key: NOTIFICATION_SERVICE_URL
+        value: "http://127.0.0.1:8086"
+      - key: RISK_ENGINE_URL
+        value: "http://127.0.0.1:8090"
+      - key: INVESTMENT_URL
+        value: "http://127.0.0.1:8091"
+      - key: AI_SERVICE_URL
+        value: "http://127.0.0.1:8092"

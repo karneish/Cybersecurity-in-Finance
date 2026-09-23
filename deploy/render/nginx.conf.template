@@ -1,0 +1,107 @@
+# CyberRisk Quantifier — nginx edge proxy (Render unified backend).
+#
+# A single public HTTPS endpoint (Render Web Service) that exposes exactly the
+# same surface as the local compose stack:
+#   /api/*   → api-gateway:18080       (JWT, rate limiting, routing)
+#   /ws      → notification-service:8086 (STOMP 1.2 over WebSocket)
+#   /health, /actuator/health, /docs, /openapi.json → api-gateway:18080
+#
+# The listen port is substituted at container start from ${PORT} (Render's
+# platform-assigned port) via sed in deploy/render/start.sh.
+
+worker_processes auto;
+error_log /dev/stderr warn;
+pid /var/run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    access_log /dev/stdout;
+    sendfile on;
+    keepalive_timeout 65;
+    server_tokens off;
+
+    client_max_body_size 20m;
+    proxy_http_version 1.1;
+    proxy_buffer_size 8k;
+    proxy_buffers 8 8k;
+
+    server {
+        listen __PORT__ default_server;
+        server_name _;
+
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Referrer-Policy "no-referrer" always;
+
+        # ── Render / platform health checks (answered by the gateway) ──
+        location = /health {
+            proxy_pass http://127.0.0.1:18080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location = /actuator/health {
+            proxy_pass http://127.0.0.1:18080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ── API (gateway enforces auth / rate limits / circuit breaking) ──
+        location /api/ {
+            proxy_pass http://127.0.0.1:18080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 300s;
+            proxy_send_timeout 300s;
+        }
+
+        # ── WebSocket / STOMP broker (exact + trailing-slash mapped to /ws) ──
+        location = /ws {
+            proxy_pass http://127.0.0.1:8086/ws;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 3600s;
+        }
+
+        location /ws/ {
+            proxy_pass http://127.0.0.1:8086/ws;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 3600s;
+        }
+
+        # ── Everything else falls through to the gateway (docs, etc.) ──
+        location / {
+            proxy_pass http://127.0.0.1:18080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 300s;
+        }
+    }
+}
