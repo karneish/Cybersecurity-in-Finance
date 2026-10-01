@@ -3,7 +3,7 @@
 # Exposes the locally running app over the internet WITHOUT making your PC a
 # server, opening router ports, signing up, or paying anything.
 #
-# The Docker stack (frontend nginx on port 3000) is the single public door:
+# The local stack (frontend Vite dev server on port 3000) is the single public door:
 #   URL
 #       -> /       React SPA
 #       -> /api/*  api-gateway -> all microservices
@@ -56,7 +56,7 @@ function Write-Err([string]$msg)   { Write-Host $msg -ForegroundColor Red }
 Write-Step "[1/4] Checking the local app on port $Port"
 if (-not (Test-NetConnection -ComputerName 127.0.0.1 -Port $Port -InformationLevel Quiet -WarningAction SilentlyContinue)) {
     Write-Err "Nothing is listening on http://localhost:$Port -- start the stack first:"
-    Write-Err "   docker compose up -d --build"
+    Write-Err "   powershell -ExecutionPolicy Bypass -File scripts\dev.ps1"
     exit 1
 }
 Write-Ok "App is reachable at http://localhost:$Port"

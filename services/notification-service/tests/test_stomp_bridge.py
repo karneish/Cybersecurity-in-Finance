@@ -2,7 +2,7 @@
 
 import asyncio
 
-from app.core.stomp import (
+from notifyapp.core.stomp import (
     REDIS_TO_DEST,
     STOMPBroker,
     RedisBridgeThread,

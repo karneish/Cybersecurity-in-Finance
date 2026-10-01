@@ -1,69 +1,115 @@
 # ────────────────────────────────────────────────────────────────────────────
-# CyberRisk Quantifier — Render Blueprint (backend as a service)
+# CyberRisk Quantifier — Render Blueprint (native Python, no Docker).
 #
-# ONE web service deploys the entire backend (api-gateway + 9 microservices)
-# behind a single public HTTPS URL, exactly mirroring the local compose stack:
+# ONE web service runs the entire backend (api-gateway + 9 microservices) and
+# exposes exactly one public HTTPS URL, so the Vercel-hosted frontend only needs
+# two environment variables:
 #
-#   https://<your-service>.onrender.com/api/*   → gateway (JWT/rate-limit/route)
-#   https://<your-service>.onrender.com/ws      → STOMP WebSocket broker
-#   https://<your-service>.onrender.com/health  → gateway (Render health check)
+#   VITE_API_BASE_URL = https://cyberrisk-backend.onrender.com/api
+#   VITE_WS_URL       = wss://cyberrisk-backend.onrender.com/ws
 #
-# The Blueprint also provisions the managed PostgreSQL database and the Redis
-# (Key Value) instance and wires their connection strings automatically.
+#   https://<host>/api/*   → nginx → api-gateway    (JWT/rate-limit/routing)
+#   https://<host>/ws      → nginx → notification   (STOMP 1.2 WebSocket)
+#   https://<host>/health  → nginx → api-gateway    (Render health check)
 #
-# Deploy (2 options):
-#   1. Render Dashboard → "New +" → "Blueprint" → select this repository.
-#   2. (NO render.yaml) create the three resources manually per deploy/render/README.md.
+# How it runs without Docker:
+#   buildCommand  apt-get installs nginx + supervisor, pip installs the
+#                 dependency union in requirements.txt and the local
+#                 `cybercommon` package from ./services/common.
+#   startCommand  deploy/render/start.sh — normalises DATABASE_URL for TLS,
+#                 waits for PostgreSQL and Redis, runs migrations + seed, then
+#                 execs supervisord, which starts the backend (all ten services
+#                 in one process, see below) and nginx (the public edge on $PORT).
+#
+# No `databases:` block on purpose. Render's free Postgres expires 30 days after
+# creation and cannot be downgraded afterwards, which would take the demo offline
+# mid-event. DATABASE_URL is prompted for instead — paste the Neon connection
+# string there (free tier, no expiry).
+#
+# Deploy:
+#   Render Dashboard → "New +" → "Blueprint" → select this repository.
 #
 # On the first sync Render prompts you for two values:
-#   - JWT_SECRET            → set a long random string
-#   - CORS_ORIGINS          → MUST be a JSON array string (the gateway parses
-#                             it with json.loads), e.g.
-#                             '["https://cyberrisk.vercel.app","http://localhost:3000"]'
-#   - OPENAI_API_KEY        → optional; leave empty to keep the offline mock LLM.
+#   - CORS_ORIGINS  → your Vercel origin, as a JSON array string, e.g.
+#                     '["https://cyberrisk.vercel.app"]'
+#                     (a comma-separated list also works — the gateway parses
+#                     both — but never leave it empty)
+#   - OPENAI_API_KEY → optional; leave empty to keep the offline mock LLM.
 #
-# Instance sizes below are the safe minimum; the stack (numpy/scipy/xgboost/
-# ortools + ten processes) is RAM hungry — if you hit OOM restarts, bump the
-# web service plan to standard-plus (4 GB) or pro.
+# Sizing: the whole backend is ONE Python process (deploy/render/serve_all.py)
+# rather than ten, because ten separate processes each load their own copy of
+# numpy/pandas/scipy/scikit-learn/xgboost/ortools and measured ~1.0-1.4 GB —
+# far past any plan Render offers cheaply. Consolidated, it measures ~231 MB,
+# which fits the Free plan's 512 MB with room to spare.
+#
+# Keeping it warm costs 744 of the 750 free instance-hours a month (a full month
+# of uptime). To stop Render sleeping it after 15 idle minutes — which would
+# show judges a 30-60s loading page — point a free UptimeRobot monitor at
+# https://<host>/health on a 5-minute interval. Do NOT create a second free web
+# service in this workspace: the hours are shared, and two always-on services
+# need ~1,488 hrs, which overruns the budget and gets everything suspended for
+# the rest of the month.
 # ────────────────────────────────────────────────────────────────────────────
 
-databases:
-  - name: cyberrisk-db
-    plan: basic-1gb
-    region: oregon
-    ipAllowList: []
+databases: []  # Intentionally empty — Neon supplies the database (see header).
 
 services:
-  # Redis-compatible Key Value store (rate limits, pub/sub, connector state).
+  # Redis-compatible Key Value store (rate limits, circuit breaker, pub/sub).
+  # `free` is 25 MB / 50 connections — ample for rate-limit counters, breaker
+  # flags and a small pub/sub backlog, none of which hold real data.
+  # ipAllowList is REQUIRED for Key Value; [] means internal-network only, which
+  # is what we want since only this web service connects.
   - type: keyvalue
     name: cyberrisk-redis
-    plan: starter
+    plan: free
     region: oregon
     maxmemoryPolicy: allkeys-lru
     ipAllowList: []
 
-  # The whole backend, one service.
+  # The whole backend, one process, one public URL.
   - type: web
     name: cyberrisk-backend
-    runtime: docker
-    plan: standard
+    runtime: python
+    plan: free
     region: oregon
     rootDir: .
-    dockerfilePath: ./deploy/render/Dockerfile
-    dockerContext: .
+
+    # nginx = public edge proxy on $PORT; the backend program runs all ten
+    buildCommand: >-
+      apt-get update
+      && apt-get install -y --no-install-recommends nginx supervisor curl
+      && rm -rf /var/lib/apt/lists/*
+      && pip install --upgrade pip
+      && pip install -r requirements.txt
+      && pip install ./services/common
+
+    startCommand: bash deploy/render/start.sh
+
     healthCheckPath: /health
     autoDeployTrigger: commit
+
+    # Ten uvicorn servers share one process, so a graceful stop has to drain all
+    # of them; the default 30s is tight. supervisord sends SIGTERM and
+    # serve_all.py turns it into a shutdown of every server.
+    maxShutdownDelaySeconds: 120
+
+    # STOMP broker conns, the risk-event consumer and the ingestion connector
+    # runner are all in-process singletons — a second instance would silently
+    # drop events and WebSocket fan-out. Never scale this service horizontally.
+    # (Also: each instance burns free hours, and 750/month only covers one.)
+    numInstances: 1
+
     envVars:
-      # Managed Postgres + Redis, wired automatically by Render.
-      - key: DATABASE_URL
-        fromDatabase:
-          name: cyberrisk-db
-          property: connectionString
+      # Managed Key Value, wired automatically by Render.
       - key: REDIS_URL
         fromService:
           name: cyberrisk-redis
           type: keyvalue
           property: connectionString
+      # Neon's pooled connection string. start.sh appends sslmode=require if
+      # it is missing, so paste the URL as-is.
+      - key: DATABASE_URL
+        sync: false
 
       # Secrets (prompted on first sync).
       - key: JWT_SECRET
@@ -73,12 +119,12 @@ services:
       - key: OPENAI_API_KEY
         sync: false
 
-      # App behaviour — identical defaults to the local .env so the deployed
-      # output is the same as running `docker compose up` today.
+      # App behaviour — identical defaults to the local .env so deployed output
+      # matches local development.
       - key: JWT_EXPIRY
-        value: "900000"
+        value: "3600"
       - key: JWT_REFRESH_EXPIRY
-        value: "604800000"
+        value: "604800"
       - key: AUTH_ALLOW_REGISTER
         value: "false"
       - key: USE_MOCK_LLM
@@ -86,8 +132,9 @@ services:
       - key: LLM_MODEL
         value: "gpt-4o"
 
-      # Keep pooled DB connections small — eight services share one Render
-      # Postgres instance, so the total pool budget must fit its connection cap.
+      # Keep pooled DB connections small — the eight DB-backed services share one
+      # Render Postgres instance, so the total pool budget must fit its cap.
+      # Default pool_size/max_overflow (10/20) would open ~240 connections.
       - key: DB_POOL_SIZE
         value: "2"
       - key: DB_MAX_OVERFLOW
@@ -95,8 +142,8 @@ services:
       - key: DB_POOL_PRE_PING
         value: "true"
 
-      # Internal service wiring is baked into the image (localhost); listed
-      # here explicitly for visibility and overrides.
+      # Internal service wiring: all ten processes share this host, so they talk
+      # over loopback. Listed here explicitly for visibility and overrides.
       - key: AUTH_SERVICE_URL
         value: "http://127.0.0.1:8081"
       - key: ASSET_SERVICE_URL

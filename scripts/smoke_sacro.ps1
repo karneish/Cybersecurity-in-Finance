@@ -1,5 +1,5 @@
 # SCRO end-to-end smoke test.
-# Run with the full stack up (docker compose up --build), then:
+# Run with the full stack up (`make up`), then:
 #   powershell -ExecutionPolicy Bypass -File scripts\smoke_sacro.ps1
 #
 # Verifies: login -> national summary -> sector compliance -> drill ->

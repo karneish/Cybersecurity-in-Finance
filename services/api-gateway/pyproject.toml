@@ -2,7 +2,7 @@
 name = "api-gateway"
 version = "0.1.0"
 description = "CyberRisk Quantifier — FastAPI reverse proxy gateway (JWT, rate limiting, circuit breaker)"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.27.0",

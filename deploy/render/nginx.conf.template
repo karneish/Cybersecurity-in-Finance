@@ -1,17 +1,19 @@
 # CyberRisk Quantifier — nginx edge proxy (Render unified backend).
 #
 # A single public HTTPS endpoint (Render Web Service) that exposes exactly the
-# same surface as the local compose stack:
+# same surface the Vercel frontend consumes:
 #   /api/*   → api-gateway:18080       (JWT, rate limiting, routing)
 #   /ws      → notification-service:8086 (STOMP 1.2 over WebSocket)
 #   /health, /actuator/health, /docs, /openapi.json → api-gateway:18080
 #
-# The listen port is substituted at container start from ${PORT} (Render's
-# platform-assigned port) via sed in deploy/render/start.sh.
+# __PORT__ and __RUNTIME__ are substituted at boot by deploy/render/start.sh,
+# which renders this template into a runtime directory and starts nginx with
+# `nginx -c <generated path>` — the distro's own /etc/nginx/nginx.conf is never
+# touched, so this works on a plain Ubuntu host with nginx apt-installed.
 
 worker_processes auto;
 error_log /dev/stderr warn;
-pid /var/run/nginx.pid;
+pid __RUNTIME__/nginx.pid;
 
 events {
     worker_connections 1024;

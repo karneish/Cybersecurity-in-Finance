@@ -2,7 +2,7 @@
 
 import math
 
-from app.core.rag import EMBED_DIM, _cosine, embed_text
+from aiapp.core.rag import EMBED_DIM, _cosine, embed_text
 
 
 def test_embed_dimensions_and_unit_length():
@@ -40,7 +40,7 @@ def test_cosine_length_mismatch_returns_zero():
 
 
 def test_corpus_structure():
-    from app.core.rag import CORPUS
+    from aiapp.core.rag import CORPUS
 
     frameworks = {row[0] for row in CORPUS}
     assert {"ISO27001", "NISTCSF", "CIS", "RBI", "SEBI", "DPDP", "TRAI", "IRDAI", "NCIIPC"} <= frameworks

@@ -50,6 +50,19 @@ def _patch_uvicorn_logging_config() -> None:
     uvicorn calls ``logging.config.dictConfig`` when a server starts, which would
     otherwise reset any handlers installed at import time. Swapping the formatter
     classes in uvicorn's config keeps every output line JSON.
+
+    The keyword arguments uvicorn ships alongside its formatter classes must be
+    dropped too: uvicorn's ``"default"`` entry passes ``use_colors=None``, which
+    only its own ``DefaultFormatter`` accepts. ``JsonFormatter`` derives from
+    plain ``logging.Formatter``, so leaving the key in place makes dictConfig
+    raise ``TypeError: Formatter.__init__() got an unexpected keyword argument
+    'use_colors'``.
+
+    This stayed hidden while each service ran as its own process, because the
+    uvicorn CLI builds its ``Config`` (and therefore runs dictConfig) *before* it
+    imports the application. ``deploy/render/serve_all.py`` imports all ten apps
+    before constructing any ``Config``, which reaches this path -- hence the
+    explicit cleanup rather than relying on import ordering.
     """
     try:
         from uvicorn.config import LOGGING_CONFIG
@@ -57,8 +70,11 @@ def _patch_uvicorn_logging_config() -> None:
         return
     LOGGING_CONFIG["disable_existing_loggers"] = False
     formatters = LOGGING_CONFIG.setdefault("formatters", {})
-    formatters.setdefault("default", {})["()"] = JsonFormatter
-    formatters.setdefault("access", {})["()"] = JsonFormatter
+    for name in ("default", "access"):
+        entry = formatters.setdefault(name, {})
+        entry["()"] = JsonFormatter
+        # Keywords accepted only by uvicorn's own formatter subclasses.
+        entry.pop("use_colors", None)
 
 
 def setup_json_logging(

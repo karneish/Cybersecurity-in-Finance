@@ -1,6 +1,6 @@
 """Unit tests for the tamper-evident audit chain primitives."""
 
-from app.core.audit_chain import hash_payload
+from riskapp.core.audit_chain import hash_payload
 
 
 def test_hash_payload_is_deterministic():

@@ -69,9 +69,12 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install test dependencies
+        # Same requirements Render installs, so CI fails on dependency drift
+        # before a deploy does.
         run: |
           pip install --upgrade pip
-          pip install pytest numpy httpx
+          pip install -r requirements.txt
+          pip install pytest
           pip install -e ./services/common
       - name: Test cybercommon (JWT + security)
         run: python -m pytest services/common/tests -q

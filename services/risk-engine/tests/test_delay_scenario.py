@@ -1,6 +1,6 @@
 """WS6 delay-remediation scenario tests (pure state builder, DB-free)."""
 
-from app.core.scenario_engine import ScenarioSimulator
+from riskapp.core.scenario_engine import ScenarioSimulator
 
 
 def _sim():

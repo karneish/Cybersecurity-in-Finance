@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 
 def _client() -> TestClient:
-    from app.main import app
+    from gwapp.main import app
 
     return TestClient(app, raise_server_exceptions=False)
 
@@ -85,7 +85,7 @@ class _FakeRedis:
 
 
 def test_circuit_track_success_after_failure_clears_integer_counter(monkeypatch):
-    import app.routes.gateway_routes as gr
+    import gwapp.routes.gateway_routes as gr
 
     fake = _FakeRedis()
     monkeypatch.setattr(gr, "redis_client", lambda: fake)
@@ -101,7 +101,7 @@ def test_circuit_track_success_after_failure_clears_integer_counter(monkeypatch)
 
 
 def test_circuit_track_trips_open_after_threshold(monkeypatch):
-    import app.routes.gateway_routes as gr
+    import gwapp.routes.gateway_routes as gr
 
     fake = _FakeRedis()
     monkeypatch.setattr(gr, "redis_client", lambda: fake)
@@ -118,7 +118,7 @@ def test_circuit_track_trips_open_after_threshold(monkeypatch):
 
 
 def test_is_excluded_exact_match_not_substring():
-    import app.routes.gateway_routes as gr
+    import gwapp.routes.gateway_routes as gr
 
     assert gr.is_excluded("/api/auth/login") is True
     assert gr.is_excluded("/api/auth/refresh") is True

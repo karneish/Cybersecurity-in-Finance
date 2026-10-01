@@ -33,6 +33,11 @@ Thumbs.db
 dist/
 build/
 out/
+# `npm run build` runs `tsc -b`, which trusts this file to skip recompilation.
+# A committed copy makes a fresh Vercel checkout skip work it never did.
+*.tsbuildinfo
+# setuptools metadata from `pip install ./services/common`
+*.egg-info/
 
 # Logs
 *.log
@@ -41,8 +46,11 @@ logs/
 # Database backups
 database/backups/
 
-# Docker
-docker-compose.override.yml
+# Native dev stack runtime state (process logs, pids) and generated
+# Render runtime configs (nginx.conf / supervisord.conf rendered by
+# deploy/render/start.sh at boot).
+.dev/
+.render/
 
 # Cloudflare tunnel secrets (stored in home dir, but keep out of git anyway)
 *.token

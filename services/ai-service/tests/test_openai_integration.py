@@ -10,7 +10,7 @@ import sys
 import types
 from types import SimpleNamespace
 
-from app.llm.llm_client import LLMClient
+from aiapp.llm.llm_client import LLMClient
 
 _FALLBACK_PROMPT = (
     "EXECUTIVE CYBER RISK SUMMARY:\n"

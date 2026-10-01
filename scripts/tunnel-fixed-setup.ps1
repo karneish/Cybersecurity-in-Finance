@@ -290,11 +290,11 @@ Write-Warn "  (If maintainers reject the CNAME target, fallback: register the sa
 # ─── 5. Ready ──────────────────────────────────────────────────────────────
 Write-Step "[5/5] Almost done"
 Write-Ok "  While the PR is being reviewed, keep the app reachable:"
-Write-Ok "    1. docker compose up -d --build"
+Write-Ok "    1. powershell -ExecutionPolicy Bypass -File scripts\dev.ps1"
 Write-Ok "    2. powershell -ExecutionPolicy Bypass -File scripts\serve-free.ps1"
 Write-Ok ""
 Write-Ok "  After the PR merges, your permanent link (same every time):"
 Write-Ok "     https://$Hostname"
 Write-Ok ""
 Write-Warn "  Verify DNS once merged:  Resolve-DnsName $Hostname"
-Write-Err "  Reminder: the site is online only while your PC + Docker + tunnel are running."
+Write-Err "  Reminder: the site is online only while your PC, the local stack + tunnel are running."

@@ -7,7 +7,7 @@ else is built on.
 
 from types import SimpleNamespace
 
-from app.core.optimizer import InvestmentOptimizer, cvss_to_probability
+from investapp.core.optimizer import InvestmentOptimizer, cvss_to_probability
 
 OPTIMIZER = InvestmentOptimizer(db=None)  # db is only used by DB-backed methods
 

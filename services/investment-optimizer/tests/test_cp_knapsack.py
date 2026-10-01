@@ -1,6 +1,6 @@
 """WS6 OR-Tools CP-SAT knapsack selection tests (pure, DB-free)."""
 
-from app.core.optimizer import InvestmentOptimizer, _HAS_ORTools
+from investapp.core.optimizer import InvestmentOptimizer, _HAS_ORTools
 
 
 OPT = InvestmentOptimizer(None)

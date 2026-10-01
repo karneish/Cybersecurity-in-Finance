@@ -3,7 +3,7 @@
 import uuid
 
 from cybercommon.models import AlertRule
-from app.core.alerts import filter_rules, matches, SUPPORTED_METRICS
+from notifyapp.core.alerts import filter_rules, matches, SUPPORTED_METRICS
 
 
 def _rule(metric, threshold, operator=">=", enabled=True, severity="HIGH", name="R", asset_id=None):

@@ -28,14 +28,15 @@ updates:
       - dependencies
       - backend
 
-  - package-ecosystem: docker
+  # Canonical backend dependency set — the same file Render installs at build.
+  - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
     labels:
       - dependencies
-      - docker
+      - backend
 
   - package-ecosystem: github-actions
     directory: /

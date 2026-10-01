@@ -1,0 +1,63 @@
+# ────────────────────────────────────────────────────────────────────────────
+# CyberRisk Quantifier — unified backend dependency set.
+#
+# The whole backend (api-gateway + 9 microservices) deploys as ONE Render web
+# service running ten uvicorn processes, so this file is the union of every
+# services/*/pyproject.toml runtime dependency plus the process supervisor.
+#
+# Web-core versions are PINNED exactly: fastapi/pydantic/starlette have a
+# history of breaking changes, and a silent minor bump there breaks the
+# gateway's proxy routes or the /ws handshake. Numeric/ML packages use ranges
+# because they ship frequent wheel-only releases with no API breakage.
+#
+# Do NOT drop the [standard] extra from uvicorn — it provides `websockets`,
+# which notification-service needs to serve the STOMP broker at /ws.
+#
+# Python floor is 3.11 (verified on 3.11.9: all 119 backend tests pass and all
+# ten services boot). Render resolves its own interpreter, so the blueprint
+# should pin PYTHON_VERSION there rather than relying on this floor.
+#
+# The shared `cybercommon` package is installed separately from ./services/common
+# (see render.yaml buildCommand), because pip cannot resolve a local path
+# dependency from inside a requirements.txt reliably across platforms.
+# ────────────────────────────────────────────────────────────────────────────
+
+# ─── ASGI / HTTP server ───────────────────────────────────────
+uvicorn[standard]==0.30.0
+starlette==0.37.2
+fastapi==0.115.0
+
+# ─── Config / validation ──────────────────────────────────────
+pydantic==2.9.0
+pydantic-settings==2.5.0
+
+# ─── Database ─────────────────────────────────────────────────
+SQLAlchemy==2.0.36
+psycopg2-binary==2.9.10
+
+# ─── Cache / message bus ──────────────────────────────────────
+redis==5.2.1
+
+# ─── Auth ─────────────────────────────────────────────────────
+PyJWT==2.10.1
+bcrypt==4.2.1
+
+# ─── Gateway proxy + telemetry ─────────────────────────────────
+httpx==0.28.1
+prometheus-client==0.21.1
+
+# ─── Process supervision (runs the ten uvicorns + nginx on Render) ───────
+# Ranged, not pinned: 4.2.7 does not exist on PyPI (4.2.5 is the last 4.2.x).
+supervisor>=4.2.5,<5.0.0
+
+# ─── AI / LLM ─────────────────────────────────────────────────
+openai==1.57.4
+
+# ─── Risk engine + investment optimizer (numeric stack) ────────
+numpy>=1.26.0,<3.0.0
+pandas>=2.2.0,<3.0.0
+scipy>=1.12.0,<2.0.0
+scikit-learn>=1.4.0,<2.0.0
+xgboost>=2.0.0,<4.0.0
+ortools>=9.8.0
+asyncpg>=0.29.0

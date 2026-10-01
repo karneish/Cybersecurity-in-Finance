@@ -1,7 +1,7 @@
 """WS5 control-effectiveness signal math (pure, DB-free)."""
 
 from cybercommon.models import AssetControl, SecurityControl
-from app.services.control_service import _config_strength, asset_control_to_dict, INCIDENT_EVENT_TYPES
+from controlapp.services.control_service import _config_strength, asset_control_to_dict, INCIDENT_EVENT_TYPES
 
 
 def _control(maturity_levels: int | None = 3) -> SecurityControl:

@@ -1,6 +1,6 @@
 """Unit tests for the single source of truth of the risk math — app/core/formulas.py."""
 
-from app.core.formulas import (
+from riskapp.core.formulas import (
     calculate_control_reduction,
     calculate_financial_impact,
     calculate_impact_components,
