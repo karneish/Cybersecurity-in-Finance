@@ -25,7 +25,7 @@
 # ─── ASGI / HTTP server ───────────────────────────────────────
 uvicorn[standard]==0.30.0
 starlette==0.37.2
-fastapi==0.115.0
+fastapi==0.141.1
 
 # ─── Config / validation ──────────────────────────────────────
 pydantic==2.9.0
