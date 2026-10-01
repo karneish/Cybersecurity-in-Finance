@@ -28,12 +28,15 @@ The platform uses PostgreSQL with domain-specific schemas:
 ## Migrations
 
 ```bash
-# From host (Postgres running locally):
+# From the host, with Postgres running locally (scripts/dev.ps1 / dev.sh do this for you):
 python database/migrate_and_seed.py
 
-# From Docker:
-docker compose exec api-gateway python database/migrate_and_seed.py
+# Or via the Makefile:
+make migrate
 ```
+
+On Render the same script runs automatically on every boot
+(`deploy/render/start.sh`).
 
 Safe to re-run — the seeder is idempotent and skips existing data.
 

@@ -134,15 +134,24 @@ def seed_vulnerabilities(conn):
         vulns = json.load(f)
 
     cur = conn.cursor()
-    for vuln in vulns:
+    for i, vuln in enumerate(vulns):
         affected_asset_uuid = asset_string_id_to_uuid(vuln["affected_asset"])
+        # Deterministic id, namespace 00000003 (assets use ...0001, controls
+        # ...0002). Without this the column falls back to
+        # DEFAULT gen_random_uuid(), so a re-run would silently insert a second
+        # copy of every vulnerability rather than raising a duplicate-key
+        # error. cve_id has only a plain index, not a unique constraint, so the
+        # primary key is the only conflict target available.
+        vuln_uuid = uuid.UUID(f"00000003-0001-0001-0001-{i+1:012d}")
         cur.execute("""
             INSERT INTO vuln.vulnerabilities (
-                cve_id, cwe_id, title, description, cvss_score, severity,
+                id, cve_id, cwe_id, title, description, cvss_score, severity,
                 exploitability, affected_asset, internet_exposed, status,
                 remediation, source
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
         """, (
+            str(vuln_uuid),
             vuln.get("cve_id"), vuln.get("cwe_id"), vuln["title"],
             vuln.get("description", ""), vuln["cvss_score"], vuln["severity"],
             vuln.get("exploitability", 0), str(affected_asset_uuid) if affected_asset_uuid else None,
@@ -251,7 +260,7 @@ def seed_risk_calculations(conn):
         asset_vuln_count[a] = asset_vuln_count.get(a, 0) + 1
 
     cur = conn.cursor()
-    for asset in assets:
+    for i, asset in enumerate(assets):
         asset_uuid = asset_string_id_to_uuid(asset["id"])
         vuln_count = asset_vuln_count.get(asset["id"], 0)
         criticality = asset.get("criticality_score", 50)
@@ -271,14 +280,19 @@ def seed_risk_calculations(conn):
         else:
             category = "LOW"
 
+        # Deterministic id, namespace 00000004 (one row per asset). random.seed(42)
+        # above still runs and the loop still iterates in full, so the generated
+        # numbers are identical on every run — ON CONFLICT only skips the write.
+        calc_uuid = uuid.UUID(f"00000004-0001-0001-0001-{i+1:012d}")
         cur.execute("""
             INSERT INTO risk.risk_calculations (
-                asset_id, risk_score, probability, financial_impact_inr,
+                id, asset_id, risk_score, probability, financial_impact_inr,
                 expected_annual_loss, risk_category, risk_factors,
                 control_reduction, residual_risk
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
         """, (
-            str(asset_uuid), round(risk_score, 2), round(base_prob, 4),
+            str(calc_uuid), str(asset_uuid), round(risk_score, 2), round(base_prob, 4),
             round(impact, 2), round(eal, 2), category,
             json.dumps({"vulnCount": vuln_count, "criticality": criticality}),
             round(random.uniform(0.1, 0.3), 4), round(eal * 0.7, 2)
@@ -324,12 +338,19 @@ def seed_risk_snapshots(conn):
         eal = base_eal * growth_factor
         vulns = int(base_vulns * (1.0 + 0.005 * back))
         score = min(100, base_score + 0.1 * back)
+        # Deterministic id, namespace 00000005. `back` counts weeks into the
+        # past and runs from weeks_back down to 0, so the index is derived from
+        # the row's offset rather than `back` itself to keep it 0-based and
+        # ascending with snapshot_date.
+        snap_index = weeks_back - back
+        snap_uuid = uuid.UUID(f"00000005-0001-0001-0001-{snap_index+1:012d}")
         cur.execute("""
-            INSERT INTO risk.risk_snapshots (risk_score, expected_annual_loss,
+            INSERT INTO risk.risk_snapshots (id, risk_score, expected_annual_loss,
                 total_controls_active, total_vulns_open, snapshot_date)
-            VALUES (%s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
         """, (
-            round(score, 2), round(eal, 2),
+            str(snap_uuid), round(score, 2), round(eal, 2),
             5 + (back // 2), vulns, snap_date
         ))
     cur.close()
@@ -616,21 +637,40 @@ def main():
 
     print("=== Seeding Mock Data ===\n")
 
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM asset.assets")
-    already_seeded = cur.fetchone()[0] > 0
-    cur.close()
+    # Each core table is checked on its own rather than gating the whole block
+    # on asset.assets. The previous single check could report "core data already
+    # present" for a database that had assets but, say, no vulnerabilities or no
+    # snapshots — leaving the Risk and Vulnerability dashboards silently empty
+    # with no error anywhere. Per-table checks let a partially seeded database
+    # heal itself on the next boot.
+    #
+    # Skipping seed_controls is safe for seed_asset_controls: control_uuids is
+    # built from the deterministic UUID list in that function's loop, not read
+    # back from the database.
+    # Skipping seed_risk_calculations is safe because it counts vulnerabilities
+    # from mock-data/vulnerabilities.json rather than from the database.
+    def has_rows(table):
+        cur = conn.cursor()
+        cur.execute(f"SELECT 1 FROM {table} LIMIT 1")
+        present = cur.fetchone() is not None
+        cur.close()
+        return present
 
-    if already_seeded:
-        print("  Core data already present — skipping core seed.\n")
-    else:
-        seed_assets(conn)
-        control_uuids = seed_controls(conn)
-        seed_vulnerabilities(conn)
-        seed_asset_controls(conn, control_uuids)
-        seed_dependencies(conn)
-        seed_risk_calculations(conn)
-        seed_risk_snapshots(conn)
+    def seed_if_empty(table, fn, *args):
+        if has_rows(table):
+            print(f"  {table} already present - skipping")
+            return
+        fn(conn, *args)
+
+    seed_if_empty("asset.assets", seed_assets)
+    # control_uuids must be produced regardless, so seed_controls runs
+    # unconditionally; it is already ON CONFLICT DO NOTHING.
+    control_uuids = seed_controls(conn)
+    seed_if_empty("vuln.vulnerabilities", seed_vulnerabilities)
+    seed_if_empty("control.asset_controls", seed_asset_controls, control_uuids)
+    seed_if_empty("asset.asset_dependencies", seed_dependencies)
+    seed_if_empty("risk.risk_calculations", seed_risk_calculations)
+    seed_if_empty("risk.risk_snapshots", seed_risk_snapshots)
 
     print("=== Seeding Sovereign Governance Data ===\n")
     seed_governance(conn)
