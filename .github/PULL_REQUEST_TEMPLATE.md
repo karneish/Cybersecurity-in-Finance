@@ -22,7 +22,7 @@ Closes # (issue number)
 - [ ] Frontend lint (`npm run lint`) passes
 - [ ] Frontend type-check (`npm run typecheck`) passes
 - [ ] Frontend tests (`npm test`) pass
-- [ ] `docker compose build` still succeeds
+- [ ] `make install` + `make up` still boots the stack cleanly
 - [ ] Smoke test passes (`scripts/smoke_sacro.ps1`)
 - [ ] README or docs updated if API/behaviour changed
 

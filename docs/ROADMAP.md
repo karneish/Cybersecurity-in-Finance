@@ -6,7 +6,7 @@
 
 ## Phase 1 — Core platform (complete)
 
-- [x] 13-service Docker stack (`db-init` + 10 FastAPI backends + React frontend + Redis)
+- [x] Native 11-process stack (10 FastAPI backends + React frontend + Redis), started by `scripts/dev.ps1` / `scripts/dev.sh`
 - [x] Role-based dashboards (ADMIN / CISO / ANALYST / VIEWER)
 - [x] Risk quantification: EAL, risk score, control reduction, dependency graph
 - [x] National Observatory: sector/region/agency roll-ups, SRI, drills
@@ -14,7 +14,8 @@
 - [x] Investment optimizer (OR-Tools enterprise + national modes)
 - [x] AI assistant (intent routing + mock LLM) + RAG compliance retrieval
 - [x] Refresh-token rotation with reuse detection, audit chain, TPRM
-- [x] CI (frontend build + backend compileall + pytest), security scan, Docker build
+- [x] CI (frontend build + backend compileall + pytest), security scan
+- [x] Hosted deployment — Render Blueprint on the native Python runtime (all 10 services + nginx in one web service) + Vercel for the frontend. The stack no longer uses containers: the "Docker build" CI job was removed with the Dockerfiles.
 
 ## Phase 2 — Hardening & scale (future — not in demo scope)
 

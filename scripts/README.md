@@ -1,10 +1,29 @@
 # Scripts
 
+## Native dev stack
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/dev.ps1   # Windows
+./scripts/dev.sh                                     # bash
+# or: make up / make down
+```
+
+Starts the ten uvicorn processes plus the Vite dev server on the ports in
+`.env.example` (frontend 3000, gateway 8080 public, 8081–8086, 8090–8092).
+Requires Python 3.11+, Node 20+ and a running PostgreSQL + Redis. PIDs land in
+`.dev/pids.json`, logs in `.dev/logs/`.
+
+| Flag | Effect |
+|---|---|
+| `-Stop` / `--stop` | Stop everything a previous run left behind |
+| `-NoFrontend` / `--no-frontend` | Backend only, skip Vite |
+| `-SkipInstall` / `--skip-install` | Skip `pip install -r requirements.txt` |
+
 ## Live tunnel (free, public URL from your PC)
 
-Exposes the local Docker stack over the internet with Cloudflare — no router
-changes, no card, no server-ifying your laptop. Frontend on port 3000 is the
-single door (SPA + `/api/*` + `/ws`).
+Exposes the local stack over the internet with Cloudflare — no router changes,
+no card, no server-ifying your laptop. The frontend on port 3000 is the single
+door (SPA + `/api/*` + `/ws`).
 
 ```bash
 powershell -ExecutionPolicy Bypass -File scripts/serve-free.ps1
@@ -32,8 +51,8 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke_sacro.ps1
 ```
 
 End-to-end verification of the full stack:
-1. Health checks on the 12 long-running services (`db-init` runs migrations + seeds once and exits)
-2. Login/register for all 4 demo users
+1. Health checks on every running service (gateway + 9 backends + frontend)
+2. Login/register for all demo users
 3. Authenticated CRUD on assets, vulnerabilities, controls, ingestion
 4. Risk-engine: score, EAL, scenario, forecast, ML forecast
 5. Gateway: bad-token rejection + happy-path forwarding
@@ -55,7 +74,9 @@ Exports a gzipped SQL dump to `database/backups/<timestamp>.sql.gz`.
 
 | Script | Requirements |
 |---|---|
-| `serve-free.ps1` | PowerShell, Docker stack up on port 3000; fetches `cloudflared` into `%TEMP%\cloudflared` if absent |
+| `dev.ps1` | PowerShell, Python 3.11+, Node 20+, PostgreSQL + Redis running |
+| `dev.sh` | bash, Python 3.11+, Node 20+, PostgreSQL + Redis running |
+| `serve-free.ps1` | PowerShell, native stack up on port 3000 (`make up`); fetches `cloudflared` into `%TEMP%\cloudflared` if absent |
 | `tunnel-fixed-setup.ps1` | PowerShell, `cloudflared` (auto-fetched), Cloudflare + GitHub logins |
 | `smoke_sacro.ps1` | PowerShell, `Invoke-WebRequest` (included in Windows) |
 | `backup_db.ps1` | PowerShell, `pg_dump` in PATH |

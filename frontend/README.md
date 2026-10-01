@@ -35,10 +35,19 @@ Role filtering happens server-side on every API endpoint and client-side for nav
 
 ## WebSocket connection
 
-`VITE_WS_URL` is a build-time env var. Leave it empty (default) so the client derives `ws(s)://<host>/ws` from the page origin — handled by nginx proxy in production and the Vite dev proxy (`localhost:8086`) in development. Set it explicitly only to override.
+`VITE_WS_URL` is a build-time env var. Leave it empty (default) so the client derives `ws(s)://<host>/ws` from the page origin — handled by the Vite dev proxy (`/ws` → `localhost:8086`) in development. Set it explicitly only to override, e.g. `wss://<backend>.onrender.com/ws` when hosted on Vercel.
 
 ## Production build
 
-The Docker multi-stage build runs `npm run build` and serves the output via nginx on port 3000. nginx proxies:
-- `/api/` → `api-gateway:8080`
-- `/ws` + `/ws/` → `notification-service:8086` (with WebSocket upgrade headers)
+`npm run build` emits a static bundle to `dist/`. There is no container image and
+no app server to run:
+
+- **Vercel** — import the repo with Root Directory `frontend`, framework preset
+  Vite, output `dist`. `vercel.json` already carries the SPA rewrite. Set two
+  build-time variables: `VITE_API_BASE_URL=https://<backend>.onrender.com/api`
+  (the `/api` suffix is required) and
+  `VITE_WS_URL=wss://<backend>.onrender.com/ws`.
+- **Self-hosted** — serve `dist/` behind nginx (or the backend's own
+  `deploy/render/nginx.conf.template`, which also fronts `/api` and `/ws`) and
+  proxy `/api/` → `api-gateway:8080`, `/ws` → `notification-service:8086` with the
+  `Upgrade`/`Connection` headers.

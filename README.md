@@ -64,7 +64,7 @@ Cyber risk is usually measured once a year with spreadsheets. This system makes 
 | **Whole-of-nation rollout** | Assets roll up via agencies → sectors → regions → nation, with regulator-grade drill-down. |
 | **Optimise, don't just report** | OR-Tools (open-source solver) maximises EAL reduction for a given budget across sectors. |
 | **Explainable AI** | LLM answers reference the *actual data and legal clauses*, not hallucinations; the ML forecast explains its method and falls back to a deterministic model when data is too small. |
-| **Zero vendor lock-in** | FastAPI, PostgreSQL + pgvector, Redis, XGBoost, OR-Tools, Docker — all free/open source. The LLM works fully offline in mock mode. |
+| **Zero vendor lock-in** | FastAPI, PostgreSQL + pgvector, Redis, XGBoost, OR-Tools — all free/open source, and the whole backend runs as plain Python processes (no container runtime required). The LLM works fully offline in mock mode. |
 | **Auditable** | Every risk calculation/drill is chained and verifiable (SHA-256 linked entries) — regulator-grade evidence. |
 | **Operationally realistic** | Toggleable simulated live connectors for SIEM/EDR/IAM/CSPM/Nessus feeds; events can be replayed. |
 
@@ -115,7 +115,7 @@ Cyber risk is usually measured once a year with spreadsheets. This system makes 
 - `/events` pagination and `/stats`.
 
 ### 3.7 Notifications (WebSocket / STOMP)
-- Native WebSocket **STOMP 1.2** broker at `/ws` (`notification-service:8086`).
+- Native WebSocket **STOMP 1.2** broker at `/ws` (`notification-service`, port `8086`).
 - Topics: **`/topic/risk/updated`** (risk recalculated) and **`/topic/ingestion/event`** (new ingested security events).
 - Redis pub/sub → STOMP bridge thread; heartbeat + keep-alive handling.
 - Frontend **notification bell** shows live events.
@@ -155,8 +155,9 @@ Cyber risk is usually measured once a year with spreadsheets. This system makes 
 | Storage | PostgreSQL (one schema per domain) + Redis (pub/sub, rate limits, connector state) | Relational integrity + realtime |
 | Realtime | Native WebSocket + STOMP 1.2 | Industry-standard push over plain WS |
 | LLM | OpenAI (optional) + offline mock mode | Zero-cost default, upgradable |
-| Containers | Docker + Docker Compose (13 services incl. `db-init` init) + nginx | Reproducible one-command stack |
-| CI | GitHub Actions | Frontend build + Python compileall |
+| Runtime | Native Python processes — `scripts/dev.ps1` / `scripts/dev.sh` locally, supervisord + nginx on Render | No container runtime anywhere; one command starts the stack |
+| Frontend hosting | Vite dev server on `:3000` locally; Vercel (Root Directory `frontend`) when deployed | Static SPA, no server to run |
+| CI | GitHub Actions | Frontend build + Python compileall + pytest |
 
 ---
 
@@ -164,49 +165,61 @@ Cyber risk is usually measured once a year with spreadsheets. This system makes 
 
 ```
                         ┌──────────────────────────────────────────────┐
-   Browser (React) ────►│  frontend  (3000, nginx)                     │
-   /api/* ─────────────►│  /api  → http://api-gateway:8080             │
-   /ws/*  ─────────────►│  /ws   → http://notification-service:8086    │
+    Browser (React) ────►│  frontend — Vite dev server (3000)           │
+    /api/* ─────────────►│  /api  → http://localhost:8080               │
+    /ws/*  ─────────────►│  /ws   → http://localhost:8086               │
                         └──────────────────────────────────────────────┘
-                                        │  /api/*
-                                        ▼
-                      ┌──────────────────────────────────────────────┐
-                      │            api-gateway (8080)                 │
-                      │  JWT filter · per-IP & per-user rate limit   │
-                      │  per-service circuit breaker · injects        │
-                      │  X-User-Id / X-User-Roles                     │
-                      └───────┬─────┬─────┬─────┬─────┬─────┬─────────┘
-              ┌───────────────┤    │     │    │     │     │           │
-              ▼               ▼     ▼      ▼    ▼      ▼             ▼
-        auth-service    asset-service  vulnerability  control    ingestion
-           (8081)          (8082)      (8083)       (8084)        (8085)
-   login/refresh/roles   CRUD/dep/     CVSS→severity  controls   events,pub/sub,
-   refresh rotation      criticality   findings/bulk   coverage   sim,replay,
-                                                                 connectors
-              ┌───────────────┬───────────────┬────────────────┐
-              ▼               ▼               ▼                ▼
-     risk-engine (8090)   investment-optimizer (8091)   ai-service (8092)
-   EAL·scenario·graph      OR-Tools RO national ·       recommend·query
-   drill·national twin     enterprise plans            explain·RAG
-   TPRM·audit chain
-   forecast + ML (xgboost)
-              │               │                     │
-              ▼               ▼                     ▼
-     ┌──────────────────────────────────────────────────────────────┐
-     │                     PostgreSQL (cyberrisk)                    │
-     │  auth · asset · vuln · control · risk · investment · gov ·    │
-     │  public (data_sources, security_events) + pgvector            │
-     └──────────────────────────────────────────────────────────────┘
-     ┌────────────────────────┐         ┌───────────────────────────────┐
-     │ Redis 7 (6379)         │◄───────►│ notification-service (8086)   │
-     │  pub/sub channels      │  bridge │  native WebSocket STOMP /ws   │
-     │  rate-limit counters   │         │  /topic/risk/updated          │
-     │  connector state/jobs  │         │  /topic/ingestion/event       │
-     └────────────────────────┘         └───────────────────────────────┘
-                                          ▲
-                                          │ subscribe
-                                     Browser WebSocket clients
+                                         │  /api/*
+                                         ▼
+                       ┌──────────────────────────────────────────────┐
+                       │            api-gateway (8080)                 │
+                       │  JWT filter · per-IP & per-user rate limit   │
+                       │  per-service circuit breaker · injects        │
+                       │  X-User-Id / X-User-Roles                     │
+                       └───────┬─────┬─────┬─────┬─────┬─────┬─────────┘
+               ┌───────────────┤    │     │    │     │     │           │
+               ▼               ▼     ▼      ▼    ▼      ▼             ▼
+         auth-service    asset-service  vulnerability  control    ingestion
+            (8081)          (8082)      (8083)       (8084)        (8085)
+    login/refresh/roles   CRUD/dep/     CVSS→severity  controls   events,pub/sub,
+    refresh rotation      criticality   findings/bulk   coverage   sim,replay,
+                                                                  connectors
+               ┌───────────────┬───────────────┬────────────────┐
+               ▼               ▼               ▼                ▼
+      risk-engine (8090)   investment-optimizer (8091)   ai-service (8092)
+    EAL·scenario·graph      OR-Tools RO national ·       recommend·query
+    drill·national twin     enterprise plans            explain·RAG
+    TPRM·audit chain
+    forecast + ML (xgboost)
+               │               │                     │
+               ▼               ▼                     ▼
+      ┌──────────────────────────────────────────────────────────────┐
+      │        PostgreSQL (localhost:5432, db cyberrisk)             │
+      │  auth · asset · vuln · control · risk · investment · gov ·    │
+      │  public (data_sources, security_events) + pgvector            │
+      └──────────────────────────────────────────────────────────────┘
+      ┌────────────────────────┐         ┌───────────────────────────────┐
+      │ Redis (6379)           │◄───────►│ notification-service (8086)   │
+      │  pub/sub channels      │  bridge │  native WebSocket STOMP /ws   │
+      │  rate-limit counters   │         │  /topic/risk/updated          │
+      │  connector state/jobs  │         │  /topic/ingestion/event       │
+      └────────────────────────┘         └───────────────────────────────┘
+                                           ▲
+                                           │ subscribe
+                                      Browser WebSocket clients
 ```
+
+**Locally, every box above is its own OS process** — ten uvicorn workers plus the
+Vite dev server, all on loopback. Nothing is containerised: `scripts/dev.ps1`
+(Windows) / `scripts/dev.sh` (bash) start them all, or `make up`.
+
+**On Render the topology differs deliberately.** Ten separate processes each load
+their own copy of numpy/pandas/scipy/scikit-learn/xgboost/ortools, which measures
+~1.0–1.4 GB — far past any cheap plan. The Free plan gives 512 MB, so the deploy
+runs all ten services as **ten uvicorn servers inside one Python process** sharing
+a single event loop (`deploy/render/serve_all.py`), which measures **~231 MB**.
+Every route, port and inter-service HTTP URL is unchanged; only the process
+count differs (§18.1).
 
 **Request flow (example — "run a national drill"):**
 1. `POST /api/risk/exercises` → gateway → risk-engine.
@@ -224,8 +237,12 @@ Cyber risk is usually measured once a year with spreadsheets. This system makes 
 ```
 .
 ├── .env.example                  # Template for all environment variables
-├── .github/workflows/ci.yml      # CI: frontend build + python compileall
+├── .github/workflows/ci.yml      # CI: frontend build + python compileall + pytest
 ├── .gitignore
+├── Makefile                      # install · up · down · restart · logs · status ·
+│                                 #   migrate · seed · test · lint · typecheck · smoke · clean
+├── requirements.txt              # union of all backend deps (CI + Render pip-install this)
+├── render.yaml                   # Render Blueprint: Postgres + Redis + native-Python web service
 ├── README.md                     # this document
 ├── architecture.md               # deeper architecture notes
 ├── implementation.md             # approved build plan + checkbox status
@@ -248,16 +265,24 @@ Cyber risk is usually measured once a year with spreadsheets. This system makes 
 │       ├── 009_create_data_sources.sql
 │       └── 010_create_python_features.sql       # refresh_tokens, security_events,
 │                                                #   pgvector, compliance_docs
-├── docker-compose.yml           # 13-service, 100% Python stack
+├── deploy/render/                # hosted backend, native Python runtime (no Dockerfile)
+│   ├── README.md                 # Render Blueprint + Vercel deploy guide
+│   ├── start.sh                  # bootstrap: wait-for-DB/Redis → migrate+seed → render
+│   │                             #   nginx + supervisor configs → exec supervisord
+│   ├── supervisord.conf.template # backend (1 process, 10 servers) + nginx → .render/
+│   ├── serve_all.py              # runs all ten services on one event loop (~231 MB)
+│   └── nginx.conf.template       # public edge on $PORT: /api/*, /ws, /health
 ├── mock-data/                   # fixtures used by migrate_and_seed.py
 │   ├── assets.json              # 12 assets
 │   ├── vulnerabilities.json     # 15 vulnerabilities
 │   ├── controls.json            # 10 controls
 │   └── sample-events.json       # 5 example security events
 ├── scripts/
-│   └── smoke_sacro.ps1          # end-to-end smoke test
+│   ├── dev.ps1                   # native stack launcher (Windows)
+│   ├── dev.sh                    # native stack launcher (bash)
+│   └── smoke_sacro.ps1           # end-to-end smoke test
 ├── services/
-│   ├── common/cybercommon/      # SHARED package (installed first by every image)
+│   ├── common/cybercommon/      # SHARED package (pip-installed before any service)
 │   │   ├── __init__.py          # exposes Settings/Base/SessionLocal/get_db
 │   │   ├── config.py            # DB/Redis/JWT settings with sane defaults
 │   │   ├── database.py          # SQLAlchemy engine + get_db() dependency
@@ -279,7 +304,7 @@ Cyber risk is usually measured once a year with spreadsheets. This system makes 
 │   ├── risk-engine/             # Core quantification — 8090
 │   ├── investment-optimizer/    # OR-Tools allocation — 8091
 │   └── ai-service/              # AI assistant + RAG — 8092
-└── frontend/                    # React SPA — 3000
+└── frontend/                    # React SPA — 3000 (Vite dev server / Vercel)
 ```
 
 > The full per-file tree (every Python module and every TSX component) is listed in [§25 — Appendix A](#25-appendix-a--file-by-file-service-notes).
@@ -300,7 +325,7 @@ Cyber risk is usually measured once a year with spreadsheets. This system makes 
 | **risk-engine** | 8090 | EAL, scenario, graph, drill, national twin, TPRM, audit chain, forecasts |
 | **investment-optimizer** | 8091 | OR-Tools return-on-investment + national budget allocation |
 | **ai-service** | 8092 | recommendations, NL queries, explain, summarize, RAG |
-| **frontend** | 3000 | React SPA (nginx serving the built bundle) |
+| **frontend** | 3000 | React SPA (Vite dev server locally; Vercel when deployed) |
 | **redis** | 6379 | pub/sub, rate limits, connector state |
 
 Every service exposes `GET /health`; the gateway also exposes `/actuator/health` for compatibility.
@@ -476,7 +501,7 @@ Endpoint: `POST /api/ai/rag/query` → `{ "clauses": [ { "framework", "clause", 
   - **`/topic/risk/alert`** — threshold alerts fired by the alert-rule engine (WS8).
 - **Bridge:** a background thread in `notification-service` subscribes to Redis channels (`risk.events.updated`, `risk.events.alert`, `ingestion.events.realtime`) and forwards each message to the STOMP broker.
 - Heartbeat keep-alives (client `0,0` = never) — used by the frontend `useWebSocket.ts` hook.
-- Frontend derives the broker URL from the page origin (`ws(s)://<host>/ws`, proxied by nginx/Vite to `notification-service:8086`). Set `VITE_WS_URL` at build time only to override.
+- Frontend derives the broker URL from the page origin (`ws(s)://<host>/ws`, proxied by the Vite dev server to `localhost:8086`). Set `VITE_WS_URL` at build time only to override — on Vercel it must be `wss://<backend>.onrender.com/ws`.
 
 ---
 
@@ -662,7 +687,7 @@ All routes are mounted behind the gateway at `/api/...` with a valid JWT (`Autho
 
 ## 16. Frontend reference
 
-React 18 + TS SPA served by nginx at **:3000**. 11 pages, 40+ components, 8 typed API clients.
+React 18 + TS SPA. 11 pages, 40+ components, 8 typed API clients. Locally the Vite dev server serves it on **:3000**; when deployed it is a static build on Vercel.
 
 ### 16.1 Routes / pages
 
@@ -693,57 +718,101 @@ Real SPA routes (`frontend/src/App.tsx` + `frontend/src/config/roles.ts`). Role 
 | Layer | Rule |
 |---|---|
 | Vite dev (`vite.config.ts`) | `/api` → `http://localhost:8080`, `/ws` → `http://localhost:8086` (ws:true) |
-| nginx prod (`nginx.conf`) | `/api/` → `http://api-gateway:8080`, `/ws` → `http://notification-service:8086` (with `Upgrade`/`Connection` headers) |
+| Vercel (build-time env) | `VITE_API_BASE_URL=https://<backend>.onrender.com/api` (the `/api` suffix is **required**), `VITE_WS_URL=wss://<backend>.onrender.com/ws` |
+
+`frontend/vercel.json` already carries the SPA rewrite; the backend's own nginx
+edge (`deploy/render/nginx.conf.template`) does the same `/api` + `/ws` fan-out
+on Render.
 
 ---
 
 ## 17. Environment variables (what every setting does)
 
-Copied from `.env.example` — defaults are safe for local `docker compose up`.
+Copied from `.env.example` — defaults are safe for local `make up` with Postgres and Redis on `localhost`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `POSTGRES_DB` | `cyberrisk` | Postgres database name |
-| `POSTGRES_USER` | `postgres` | Postgres user |
-| `POSTGRES_PASSWORD` | `postgres` | Postgres password |
-| `DATABASE_URL` | `postgresql://postgres:postgres@postgres:5432/cyberrisk` | SQLAlchemy URL (inside compose; the `migrate_and_seed.py`/local default is `postgresql://postgres:root123@localhost:5432/cyberrisk`) |
-| `REDIS_URL` | `redis://redis:6379/0` | Redis server |
+| `DATABASE_URL` | `postgresql://postgres:password@localhost:5432/cyberrisk` | libpq SQLAlchemy URL. On Render this is injected by the blueprint; `deploy/render/start.sh` appends `?sslmode=require` |
+| `DB_USER` / `DB_PASSWORD` | `postgres` / `password` | Postgres credentials |
+| `REDIS_URL` | `redis://localhost:6379` | Redis server (rate limits, pub/sub, connector state) |
 | `JWT_SECRET` | bundled example (change in prod!) | HS256 signing key |
 | `JWT_EXPIRY` | `3600` | access-token TTL (seconds) |
 | `JWT_REFRESH_EXPIRY` | `604800` | refresh-token TTL (7 days) |
+| `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | CORS allowlist — **comma-separated list or a JSON array**, both parse. Must contain the frontend origin; on Render that is your Vercel origin (e.g. `https://cyberrisk.vercel.app`). Empty blocks every browser request and logs a startup warning |
+| `AUTH_SERVICE_URL` … `AI_SERVICE_URL` | `http://localhost:<port>` | loopback wiring for the nine backends; the gateway defaults to these, so usually leave unset |
+| `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` / `DB_POOL_PRE_PING` | `5` / `5` / `true` | total connections ≈ services × (pool + overflow) — keep low |
 | `USE_MOCK_LLM` | `true` | offline LLM (₹0) — set `false` + `OPENAI_API_KEY` for real answers |
+| `LLM_MODEL` | `gpt-4o` | model id used when the mock is off |
 | `OPENAI_API_KEY` | *(empty)* | only used when `USE_MOCK_LLM=false` |
 | `EMBED_DIM` | `384` | RAG deterministic embedding size |
-| `GATEWAY_ORIGIN_WHITELIST` | `*` | CORS allowed origins |
+| `VITE_API_BASE_URL` | *(empty locally)* | **Vercel build-time.** Must include the `/api` suffix |
+| `VITE_WS_URL` | *(empty)* | **Vercel build-time.** Absolute `wss://` URL, no trailing slash. Empty derives same-origin `ws(s)://<host>/ws` |
 
 ---
 
 ## 18. Setup & running
 
-**Prerequisites:** Docker + Docker Compose (v2). No local Python/Node needed.
+**Prerequisites:** Python 3.11+, Node.js 20+, a running **PostgreSQL**, a running **Redis**. Docker is *not* required anywhere — the backend is plain uvicorn processes.
+
+### 18.1 Local development (native)
 
 ```bash
-# 1. (optional) configure
-copy .env.example .env
+# 1. configure
+copy .env.example .env          # Windows
+cp .env.example .env            # bash
+#    then edit DATABASE_URL / REDIS_URL to match your local Postgres + Redis
 
-# 2. build & start the whole stack (13 services — `db-init` runs migrations + seeds once and exits)
-docker compose up --build
+# 2. install dependencies (backend union + shared package + frontend)
+make install
+#    or: pip install -r requirements.txt && pip install ./services/common && cd frontend && npm install
 
-# 3. migrate + seed (idempotent; can be re-run any time)
-docker compose exec api-gateway python database/migrate_and_seed.py
-#    or, on the host with a local Postgres:
-#    python database/migrate_and_seed.py
+# 3. start the whole stack — ten uvicorn processes + the Vite dev server
+powershell -ExecutionPolicy Bypass -File scripts/dev.ps1    # Windows
+./scripts/dev.sh                                      # bash
+make up                                               # either, via the Makefile
+
+# 4. migrate + seed (the launcher does this for you; it is idempotent and re-runnable)
+make migrate          # == python database/migrate_and_seed.py
 ```
+
+Stop it again with `powershell -File scripts/dev.ps1 -Stop` / `./scripts/dev.sh --stop` (or `make down`). Logs are written per process to `.dev/logs/`; `make logs` tails them all, `make status` shows which ports are listening.
 
 Then:
 - **Frontend:** http://localhost:3000 (login: see §19)
 - **Gateway docs:** http://localhost:8080/docs
 - **Per-service Swagger:** http://localhost:<port>/docs (ports in §7)
-- **Live WebSocket:** `ws(s)://<host>/ws` (same-origin via nginx; direct broker at `ws://localhost:8086/ws`)
+- **Live WebSocket:** `ws://localhost:8086/ws` directly, or `ws://localhost:3000/ws` through the Vite dev proxy
 
-**Local (no Docker) alternative:** run Postgres + Redis, set `DATABASE_URL`/`REDIS_URL`, then `pip install -e services/common/cybercommon` and `uvicorn` each `services/*/app/main.py` on its port.
+Useful flags: `-NoFrontend` (backend only) and `-SkipInstall` on `scripts/dev.ps1` / `--no-frontend`, `--skip-install` on `scripts/dev.sh`.
 
-**Reclaiming Docker disk / RAM:** `make slim` (or `powershell -ExecutionPolicy Bypass -File scripts/slim_docker.ps1`) prunes the BuildKit build cache and dangling images only — no volumes or tagged images, and nothing that belongs to other projects. To lower Docker's memory reservation, edit `%USERPROFILE%\.wslconfig` (`memory=4GB` suits this stack; it runs in ~1 GB), then `wsl --shutdown` and reopen Docker Desktop. When not demoing, `docker compose stop` frees the RAM immediately.
+### 18.2 Hosted deployment (Render + Vercel)
+
+The same code deploys with **no image build anywhere**: the Render Blueprint uses `runtime: python` and one **free** web service that runs all ten services as one Python process (`deploy/render/serve_all.py`, ~231 MB) under supervisord behind nginx, while the frontend is a static Vite build on Vercel.
+
+```bash
+# Render Dashboard → New + → Blueprint → select this repository.
+#   sync:false values prompted on first sync:
+#     DATABASE_URL  → your Neon pooled connection string
+#     CORS_ORIGINS  → your Vercel origin (comma-separated or JSON array)
+#     OPENAI_API_KEY → leave empty for the mock LLM.
+#   JWT_SECRET is generated for you.
+#   There is deliberately NO `databases:` block: Render's free Postgres expires
+#   after 30 days, so the database comes from Neon instead.
+
+# Vercel → import the same repo → Root Directory = frontend (framework Vite,
+#   output dist). Two mandatory BUILD-TIME variables:
+#   VITE_API_BASE_URL = https://<backend>.onrender.com/api
+#   VITE_WS_URL       = wss://<backend>.onrender.com/ws
+```
+
+**Keeping it warm.** A free Render service sleeps after 15 idle minutes and takes
+30–60s to wake, which is a bad look during judging. Point a free **UptimeRobot**
+monitor at `https://<backend>.onrender.com/health` on a 5-minute interval and it
+never sleeps. That costs 744 of the 750 free instance-hours a month, so **do not
+add a second free web service to the same workspace** — two always-on services
+need ~1,488 hours and Render suspends everything for the rest of the month.
+
+Full walkthrough, sizing guidance and troubleshooting: [`deploy/render/README.md`](deploy/render/README.md).
 
 ---
 
@@ -782,7 +851,7 @@ Expected result: `PASSED: 12 FAILED: 0`. The full verify → recalc → live-upd
 
 ## 20a. Demo walkthrough (15-minute script)
 
-Everything below runs against the seeded local stack (`docker compose up -d`), with the dashboard at `http://localhost:3000` and the API at `http://localhost:8080`. Two personas:
+Everything below runs against the seeded local stack (`make up`), with the dashboard at `http://localhost:3000` and the API at `http://localhost:8080`. Two personas:
 
 | Minute | Persona | Action | Live result (seeded data) |
 |---|---|---|---|
@@ -801,8 +870,11 @@ Every step is also enforced by `scripts/smoke_sacro.ps1` (12/12). The WebSocket 
 ## 21. CI / CD
 
 `.github/workflows/ci.yml` on every push/PR:
-1. **Frontend:** `npm ci` + `npm run build` (type-check + Vite production build).
-2. **Backend:** Python 3.12 job with `pip install -e services/common/cybercommon` then `python -m compileall -q` over **every service** and `database/` (fails fast on syntax errors across the whole stack).
+1. **Frontend:** `npm ci` + `npm run build` (type-check + Vite production build) + `npm run test` (Vitest).
+2. **Backend compile:** Python 3.12 job running `python -m compileall -q` over **every service** and `database/` (fails fast on syntax errors across the whole stack).
+3. **Backend tests:** `pip install -r requirements.txt` + `pip install -e ./services/common` — the exact dependency set Render installs, so dependency drift fails CI before it fails a deploy — then the pytest suites for every service.
+
+CD is Render: pushing to the connected branch triggers a native-Python build and deploy of the single `cyberrisk-backend` web service (`render.yaml`).
 
 ---
 
@@ -834,7 +906,7 @@ This is the real-money answer to **"how much to build a national cyber-risk quan
 
 | Environment | Monthly cost |
 |---|---|
-| Local / single dev box | **₹0** (this repo runs fully offline, mock LLM, Docker on one machine) |
+| Local / single dev box | **₹0** (this repo runs fully offline, mock LLM, native Python processes on one machine) |
 | Small public cloud (stage + demo) | ₹2–6k/mo ($25–$75) |
 | Production MVP (2 small VMs + managed Postgres + Redis, honest sizing) | ₹10–35k/mo ($120–$420) |
 | National HA (multi-region, replication, geo-redundant Redis/DB, CDN, WAF, backups) | ₹60k–2 L/mo ($750–$2,500) |
@@ -847,7 +919,7 @@ This is the real-money answer to **"how much to build a national cyber-risk quan
 - **Idempotent seeding + full docs + smoke tests** — onboarding a new engineer/agency takes hours, not weeks.
 
 ### 22.5 Cut-to-fit playbook (how to spend even less)
-1. Start with **Option A** and `docker compose up` on one machine — today.
+1. Start with **Option A** and `make up` on one machine — today.
 2. Keep **mock LLM** on until a pilot stakeholder specifically demands LLM answers; the API contract is identical (`/api/ai/*`), so the swap is a config change.
 3. Use the **deterministic embedder** forever — RAG quality is fine for a 22-clause regulatory corpus and costs nothing.
 4. Buy **one ₹15k/mo instance once** — run all 10 services + Postgres + Redis on a single 8 vCPU box for the first real users; scale out only when a load test proves you need it.
@@ -874,8 +946,9 @@ This is the real-money answer to **"how much to build a national cyber-risk quan
 
 - **Migrations:** `database/migrate_and_seed.py` applies any new `migrations/*.sql` in the right order and is fully **re-runnable** (seed rows upserted by name/UUID — safe for daily scheduling).
 - **Seeding independence:** new seeds merge; nothing is wiped.
-- **Health:** `GET /health` on every service + gateway aggregation (`/actuator/health`); Docker Compose `restart: unless-stopped` + healthchecks.
-- **Logs:** `docker compose logs -f` per service; STDERR-style app logging; structured fatal logs.
+- **Health:** `GET /health` on every service + gateway aggregation (`/actuator/health`); `make status` lists which stack ports are listening, and each service logs its own startup line to `.dev/logs/`.
+- **Logs:** `make logs` (tails every file in `.dev/logs/`) or read one directly, e.g. `.dev/logs/api-gateway.log`; STDERR-style app logging; structured fatal logs.
+- **Process control:** `scripts/dev.ps1` / `scripts/dev.sh` track PIDs in `.dev/pids.json` and stop cleanly; supervisord does the same job on Render.
 - **Backup:** standard `pg_dump` of the `cyberrisk` database (schemas + `public` data_sources/events); restore = fresh migrate+seed is not required (seed is idempotent anyway).
 - **Upgrading the LLM:** set `USE_MOCK_LLM=false` + `OPENAI_API_KEY`; no code change.
 
@@ -930,7 +1003,7 @@ This is the real-money answer to **"how much to build a national cyber-risk quan
 `app/main.py`, `app/routes/ai.py`, `app/routes/rag_routes.py`, `app/core/llm.py` (mock + OpenAI), `app/core/intent.py` (classification), `app/core/rag.py` (deterministic 384-dim embedder + cosine retrieval + corpus sync), `app/core/consolidate.py`, `app/core/prompts.py`.
 
 ### frontend
-`src/main.tsx`, `src/App.tsx` (router + guards + layout), `src/context/AuthContext.tsx`, `src/hooks/useWebSocket.ts` (STOMP over raw WS, zero-heartbeat), `src/hooks/useDashboardData.ts`, `src/api/*` (8 typed clients), `src/pages/*` (11 pages from §16), `src/components/*` (40+ widgets incl. RiskGauge, EALDrilldown, DrillRunner, BudgetAllocator, RAGPanel, Heatmap, NotificationsBell), `nginx.conf`, `Dockerfile`, `vite.config.ts`.
+`src/main.tsx`, `src/App.tsx` (router + guards + layout), `src/context/AuthContext.tsx`, `src/hooks/useWebSocket.ts` (STOMP over raw WS, zero-heartbeat), `src/hooks/useDashboardData.ts`, `src/api/*` (8 typed clients), `src/pages/*` (11 pages from §16), `src/components/*` (40+ widgets incl. RiskGauge, EALDrilldown, DrillRunner, BudgetAllocator, RAGPanel, Heatmap, NotificationsBell), `vite.config.ts` (dev proxy `/api` + `/ws`), `vercel.json` (SPA rewrite for Vercel).
 
 ---
 

@@ -1,8 +1,8 @@
 # common — shared Python package
 
-The `cybercommon` package is installed first by every service Docker image at
-`/opt/common/cybercommon`. It provides the shared foundation all microservices
-depend on.
+The `cybercommon` package is the shared foundation all microservices depend on. It
+is installed once per environment — `pip install ./services/common` locally, and
+in the `buildCommand` on Render — before any service is started.
 
 ## Modules
 
@@ -21,11 +21,12 @@ depend on.
 ## Installation
 
 ```bash
-pip install -e services/common
+pip install ./services/common      # or: pip install -e services/common
 ```
 
 The package is named `cybercommon` (installed as `cybercommon`, not `common`) to
-avoid setuptools flat-layout conflicts.
+avoid setuptools flat-layout conflicts. Install it **before** the services — every
+`uvicorn` process imports it.
 
 ## Tests
 

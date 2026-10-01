@@ -3,19 +3,25 @@
 ## Starting the stack
 
 ```bash
-docker compose up -d
-docker compose ps                # all services should show "healthy"
+make up          # powershell -ExecutionPolicy Bypass -File scripts/dev.ps1  |  ./scripts/dev.sh
+make status      # which of 3000, 8080-8086, 8090-8092 are listening
 ```
 
-If any service reports unhealthy, wait 30 s and re-check — databases take time to initialise.
+`scripts/dev.ps1` / `scripts/dev.sh` verify that PostgreSQL and Redis are
+reachable, install dependencies (unless `--skip-install`), start the ten uvicorn
+processes plus the Vite dev server, record PIDs in `.dev/pids.json` and run
+migrations + seed.
+
+Stop with `make down` (`-Stop` / `--stop`). If a service reports unhealthy on
+first start, wait 30 s and re-check — upstreams and the database need a moment.
 
 ## Migrations
 
 ```bash
-python database/migrate_and_seed.py   # idempotent; safe to re-run
+make migrate     # == python database/migrate_and_seed.py   (idempotent; safe to re-run)
 ```
 
-Creates schemas, tables, seeds 12 assets, 15 vulnerabilities, 10 controls, risk snapshots, and governance data.
+Creates schemas, tables, seeds 12 assets, 15 vulnerabilities, 10 controls, risk snapshots, and governance data. On Render this runs automatically on every boot via `deploy/render/start.sh`.
 
 ## Common issues
 
@@ -24,21 +30,20 @@ Creates schemas, tables, seeds 12 assets, 15 vulnerabilities, 10 controls, risk 
 The upstream services are still starting. Check:
 ```bash
 curl http://localhost:8080/health
-docker compose logs api-gateway
+type .dev\logs\api-gateway.log
 ```
 
 ### WebSocket /ws not delivering messages
 
 1. Confirm notification-service is running: `curl http://localhost:8086/health`
-2. Verify nginx forwarding: `curl -i -H "Upgrade: websocket" -H "Connection: Upgrade" http://localhost:3000/ws`
-3. Check Redis bridge logs: `docker compose logs notification-service`
+2. Verify the Vite dev proxy forwards `/ws`: `curl -i -H "Upgrade: websocket" -H "Connection: Upgrade" http://localhost:3000/ws`
+3. Check Redis bridge logs: `type .dev\logs\notification-service.log`
 
 ### Frontend blank page after rebuild
 
 `VITE_WS_URL` is a build-time override; the default is empty, which makes the client derive the broker URL `ws(s)://<host>/ws` from the page origin. Rebuild after changing it:
 ```bash
-docker compose build frontend
-docker compose up -d frontend
+make restart     # stop the stack, then start it again
 ```
 
 ## Backups
@@ -52,11 +57,12 @@ scripts/backup_db.ps1     # or backup_db.sh on Linux
 ## Logs
 
 ```bash
-docker compose logs -f <service-name>
-# Examples:
-docker compose logs -f risk-engine
-docker compose logs -f notification-service
+make logs                                     # tail every process log
+type .dev\logs\risk-engine.log                # risk calc & WS publishing
+type .dev\logs\notification-service.log       # STOMP broker / Redis bridge
 ```
+
+Logs live in `.dev/logs/` (one file per process). The host-equivalent on Render is Settings → Logs, which also carries the `start.sh` bootstrap output and supervisord state.
 
 ## Health endpoints
 

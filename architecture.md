@@ -923,9 +923,11 @@ It IS claimed because:
 
 | Technology | Purpose |
 |------------|---------|
-| Docker | Containerization |
-| Docker Compose | Local orchestration |
-| NeonDB | PostgreSQL (managed) |
+| Python 3.11+ (native processes) | Backend runtime — locally ten uvicorn processes; on Render one process with ten servers (~231 MB). No container runtime |
+| nginx + supervisord | Public edge + process supervision on the Render host |
+| Render (native Python runtime) | Hosting (single web service, managed Postgres + Key Value) |
+| Vercel | Static frontend hosting (Vite build, Root Directory `frontend`) |
+| PostgreSQL | Database (local instance, NeonDB or Render managed) |
 | Redis | Caching + Pub/Sub (dev event bus) |
 | GitHub Actions | CI/CD (Phase 2) |
 
@@ -933,15 +935,19 @@ It IS claimed because:
 
 ## 9. Deployment Architecture
 
-### 9.1 Docker Compose (Development)
+### 9.1 Local Development (native processes)
+
+Everything runs as a plain OS process on one host — `scripts/dev.ps1` (Windows),
+`scripts/dev.sh` (bash) or `make up`. No containers, no service-discovery
+network: all inter-service traffic is loopback.
 
 ```
 ┌─────────────────────────────────────────────┐
-│              Docker Network                  │
+│      Dev machine (native Python processes)   │
 │                                              │
 │  ┌──────────┐  ┌──────────┐                │
 │  │ frontend  │  │  redis   │                │
-│  │ :3000    │  │  :6379   │                │
+│  │ Vite:3000 │  │  :6379   │                │
 │  └──────────┘  └──────────┘                │
 │                                              │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
@@ -966,10 +972,12 @@ It IS claimed because:
 │  │  :8086   │                               │
 │  └──────────┘                               │
 │                                              │
+│  PIDs tracked in .dev/pids.json, logs in     │
+│  .dev/logs/                                 │
 └─────────────────────────────────────────────┘
-         │
-         ▼
-   NeonDB (external)
+          │
+          ▼
+   PostgreSQL (localhost:5432, db cyberrisk)
 ```
 
 ### 9.2 Production (Phase 2/3)
@@ -1020,7 +1028,7 @@ It IS claimed because:
 | notification-service | Build | P0 |
 | Frontend (all dashboards) | Build | P0 |
 | Mock data + seeds | Build | P0 |
-| Docker Compose | Build | P0 |
+| Native dev stack (`scripts/dev.ps1` / `dev.sh` + Makefile) | Build | P0 |
 | WebSocket live updates | Build | P1 |
 
 ### Phase 2 — Enhanced Intelligence
@@ -1367,8 +1375,8 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    subgraph Cluster["Docker Compose Network"]
-        FE["frontend nginx :3000"]
+    subgraph Cluster["Local host — native Python processes"]
+        FE["frontend Vite dev server :3000"]
         GW["api-gateway :8080"]
         ING["ingestion-service :8085"]
         AUTH["auth-service :8081"]

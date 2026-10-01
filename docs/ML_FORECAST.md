@@ -40,7 +40,7 @@ If fewer than 18 snapshots exist, returns `ml.used: false` with a deterministic 
 ### Running locally
 
 ```bash
-# With the Docker stack running:
+# With the native stack running (`make up`):
 curl -X POST http://localhost:8080/api/risk/forecast/ml \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \

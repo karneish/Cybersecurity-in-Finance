@@ -28,6 +28,7 @@ within 5 business days.
 - **Change `JWT_SECRET`** before any non-local deployment.
 - **Change the demo password** on all three seeded accounts (`scro_regulator` / `scro_banker` / `scro_auditor`, shared password `Scro@2026!`) before any non-local deployment.
 - Do not expose `services/*/docs` (Swagger) or `/health` publicly in production.
-- Run Postgres on a private network; containers reach it via `host.docker.internal`.
+- Run Postgres on a private network. All services run as local processes on one host, so locally `DATABASE_URL` points at `localhost`; in a hosted deployment use the provider's private connection string (Render's managed Postgres, reached over the private network — `deploy/render/start.sh` adds `sslmode=require`).
+- Set `CORS_ORIGINS` to the exact frontend origin in production. It accepts a comma-separated list or a JSON array; empty (or `*`) either blocks every browser request or is not a valid allowlist entry.
 - Frontend roles are enforced client-side for UX only — every dangerous endpoint
   (e.g. `/api/risk/national/*`) is also gated server-side by role claims.

@@ -27,7 +27,8 @@ What actually happened. Include error messages, logs, or screenshots if possible
 ## Environment
 
 - OS:
-- Docker version:
+- Python version (3.12+ expected):
+- Node version (20+ expected):
 - Browser (for frontend issues):
 - Service affected (e.g. `risk-engine`, `api-gateway`):
 
