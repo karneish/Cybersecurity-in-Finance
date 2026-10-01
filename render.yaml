@@ -88,10 +88,11 @@ services:
     healthCheckPath: /health
     autoDeployTrigger: commit
 
-    # Ten uvicorn servers share one process, so a graceful stop has to drain all
-    # of them; the default 30s is tight. supervisord sends SIGTERM and
-    # serve_all.py turns it into a shutdown of every server.
-    maxShutdownDelaySeconds: 120
+    # No maxShutdownDelaySeconds here: Render rejects that field on the Free
+    # plan. The default 30s is enough, because supervisord.conf.template sets
+    # stopwaitsecs = 20 for the backend program — deliberately below Render's 30s
+    # budget, so supervisord always finishes (or SIGKILLs) before Render does.
+    # serve_all.py turns SIGTERM into a shutdown of all ten servers.
 
     # STOMP broker conns, the risk-event consumer and the ingestion connector
     # runner are all in-process singletons — a second instance would silently
