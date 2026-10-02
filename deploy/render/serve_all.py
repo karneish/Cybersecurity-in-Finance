@@ -14,11 +14,15 @@ pandas, scipy, scikit-learn, xgboost, ortools). Measured on this repo:
 
 So one process with everything loaded is roughly a third of the footprint.
 This module keeps all ten apps, all ten ports and every inter-service HTTP URL
-completely unchanged -- only the process topology differs. The gateway still
-reaches auth on http://127.0.0.1:8081 exactly as before.
+completely unchanged -- only the process topology differs.
 
-nginx remains the public edge on $PORT (see nginx.conf.template): it forwards
-/api/* and /health to the gateway on 18080, and /ws to notification on 8086.
+The public edge
+---------------
+A final server on the platform-assigned $PORT serves `edge_proxy.edge_app`
+(`/api/*` and `/health` to the gateway, `/ws` to notification-service). It lives
+in this same process, which is also why nginx is gone: Render's native runtime
+has a read-only /var/lib/apt, so nginx could not be installed. The ten services
+bind 127.0.0.1; only the edge binds 0.0.0.0.
 """
 
 from __future__ import annotations
@@ -29,6 +33,9 @@ import os
 import signal
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from edge_proxy import aclose, edge_app  # noqa: E402
 
 SERVICES_ROOT = Path(__file__).resolve().parents[2] / "services"
 
@@ -44,7 +51,7 @@ SERVICES: list[tuple[str, str, int]] = [
     ("risk-engine", "riskapp", 8090),
     ("investment-optimizer", "investapp", 8091),
     ("ai-service", "aiapp", 8092),
-    ("api-gateway", "gwapp", 18080),  # internal-only; nginx owns the public port
+    ("api-gateway", "gwapp", 18080),  # internal-only; the edge proxy owns the public port
 ]
 
 HOST = "127.0.0.1"
@@ -97,6 +104,23 @@ def build_servers(loaded):
         # for the whole process instead (see main()).
         server.install_signal_handlers = lambda: None
         servers.append(server)
+
+    # The public edge, in this same process. This is what nginx used to do, and
+    # it is the only server bound to 0.0.0.0.
+    edge_port = int(os.getenv("PORT", "8080"))
+    edge_config = Config(
+        app=edge_app,
+        host="0.0.0.0",
+        port=edge_port,
+        log_level=os.getenv("LOG_LEVEL", "info"),
+        access_log=True,
+        lifespan="off",  # the edge owns no resources of its own
+        timeout_keep_alive=30,
+    )
+    edge_server = Server(edge_config)
+    edge_server.install_signal_handlers = lambda: None
+    servers.append(edge_server)
+    print(f"[serve_all] edge proxy   -> 0.0.0.0:{edge_port} (public $PORT)", flush=True)
     return servers
 
 
@@ -126,6 +150,8 @@ def main() -> int:
         asyncio.run(run(servers))
     except KeyboardInterrupt:  # pragma: no cover
         pass
+    finally:
+        asyncio.run(aclose())
     print("[serve_all] all services stopped", flush=True)
     return 0
 

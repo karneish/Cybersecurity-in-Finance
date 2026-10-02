@@ -4,21 +4,23 @@
 # placeholders with paths resolved on the live host, then launches supervisord
 # against the generated copy. Do not edit the generated file — edit this one.
 #
-# ── Why there are only TWO programs now ──────────────────────────────────────
-# This used to start ten uvicorn processes, one per service. That costs roughly
-# 1.0-1.4 GB because each process loads its own copy of the interpreter and of
-# numpy/pandas/scipy/scikit-learn/xgboost/ortools.
+# ── Why there is only ONE program now ───────────────────────────────────────
+# This used to start ten uvicorn processes, one per service, plus nginx.
+# That costs roughly 1.0-1.4 GB because each process loads its own copy of the
+# interpreter and of numpy/pandas/scipy/scikit-learn/xgboost/ortools.
 #
 # Render's Free plan gives a web service 512 MB, so all ten services now run in
 # ONE process (deploy/render/serve_all.py), sharing a single event loop. Each
 # service keeps its own port and its own ASGI app, so every route and every
-# inter-service HTTP URL is unchanged — only the process topology differs.
+# inter-service HTTP URL is unchanged — only the process count differs.
+#
+# nginx was removed as well: Render's native runtime has a read-only
+# /var/lib/apt, so `apt-get install nginx` fails the build. The public edge is
+# now deploy/render/edge_proxy.py, running inside the same process as an
+# eleventh server bound to 0.0.0.0:$PORT. The services bind 127.0.0.1, so
+# nothing but the edge is reachable from outside.
 #
 # Measured footprint of the consolidated process: ~231 MB.
-#
-# nginx is still the public edge and owns $PORT: /api/* and /health go to the
-# gateway on 18080, /ws goes to notification-service on 8086. The services
-# themselves bind 127.0.0.1, so nothing but nginx is reachable from outside.
 
 [supervisord]
 nodaemon = true
@@ -27,6 +29,10 @@ logfile_maxbytes = 0
 pidfile = __RUNTIME__/supervisord.pid
 childlogdir = __RUNTIME__
 
+# One program. It runs the ten services AND the public edge proxy, so there is
+# no separate nginx process -- Render's native runtime has a read-only
+# /var/lib/apt, so nginx could not be installed in the first place. See
+# deploy/render/edge_proxy.py.
 [program:backend]
 command = __PYTHON__ __REPO__/deploy/render/serve_all.py
 directory = __REPO__
@@ -36,7 +42,9 @@ autorestart = true
 startsecs = 20
 startretries = 5
 stopwaitsecs = 20
-# serve_all.py turns SIGTERM into a graceful shutdown of all ten servers.
+# serve_all.py turns SIGTERM into a graceful shutdown of all eleven servers.
+# Render's default 30s budget is deliberately above stopwaitsecs so supervisord
+# always finishes its own stop first.
 stopsignal = TERM
 stopasgroup = true
 killasgroup = true
@@ -44,15 +52,3 @@ stdout_logfile = /dev/stdout
 stdout_logfile_maxbytes = 0
 redirect_stderr = true
 environment = PYTHONUNBUFFERED="1"
-
-[program:nginx]
-command = __NGINX__ -c __RUNTIME__/nginx.conf -g "daemon off;"
-priority = 200
-autostart = true
-autorestart = true
-startsecs = 5
-startretries = 20
-stopwaitsecs = 10
-stdout_logfile = /dev/stdout
-stdout_logfile_maxbytes = 0
-redirect_stderr = true

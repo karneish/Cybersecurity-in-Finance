@@ -47,7 +47,7 @@ no app server to run:
   build-time variables: `VITE_API_BASE_URL=https://<backend>.onrender.com/api`
   (the `/api` suffix is required) and
   `VITE_WS_URL=wss://<backend>.onrender.com/ws`.
-- **Self-hosted** — serve `dist/` behind nginx (or the backend's own
-  `deploy/render/nginx.conf.template`, which also fronts `/api` and `/ws`) and
+- **Self-hosted** — serve `dist/` behind any reverse proxy (or the backend's own
+  `deploy/render/edge_proxy.py`, which also fronts `/api` and `/ws`) and
   proxy `/api/` → `api-gateway:8080`, `/ws` → `notification-service:8086` with the
   `Upgrade`/`Connection` headers.

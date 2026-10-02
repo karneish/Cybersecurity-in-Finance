@@ -15,7 +15,7 @@
 - [x] AI assistant (intent routing + mock LLM) + RAG compliance retrieval
 - [x] Refresh-token rotation with reuse detection, audit chain, TPRM
 - [x] CI (frontend build + backend compileall + pytest), security scan
-- [x] Hosted deployment — Render Blueprint on the native Python runtime (all 10 services + nginx in one web service) + Vercel for the frontend. The stack no longer uses containers: the "Docker build" CI job was removed with the Dockerfiles.
+- [x] Hosted deployment — Render Blueprint on the native Python runtime (all 10 services + a Python edge proxy in one web service) + Vercel for the frontend. The stack no longer uses containers: the "Docker build" CI job was removed with the Dockerfiles.
 
 ## Phase 2 — Hardening & scale (future — not in demo scope)
 

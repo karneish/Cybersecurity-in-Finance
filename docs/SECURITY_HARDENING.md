@@ -27,7 +27,7 @@ Use this checklist when deploying the CyberRisk platform outside of local develo
 
 ## Frontend
 
-- [x] `VITE_WS_URL` left empty → client derives `ws(s)://<host>/ws` same-origin, proxied by nginx
+- [x] `VITE_WS_URL` left empty → client derives `ws(s)://<host>/ws` same-origin, proxied by the Vite dev proxy locally and by `edge_proxy.py` on Render
 - [ ] Swagger/docs endpoints (`/docs`, `/redoc`) are blocked in production
 - [ ] Health endpoints (`/health`) are not publicly accessible
 

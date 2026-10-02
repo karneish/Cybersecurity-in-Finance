@@ -155,7 +155,7 @@ Cyber risk is usually measured once a year with spreadsheets. This system makes 
 | Storage | PostgreSQL (one schema per domain) + Redis (pub/sub, rate limits, connector state) | Relational integrity + realtime |
 | Realtime | Native WebSocket + STOMP 1.2 | Industry-standard push over plain WS |
 | LLM | OpenAI (optional) + offline mock mode | Zero-cost default, upgradable |
-| Runtime | Native Python processes — `scripts/dev.ps1` / `scripts/dev.sh` locally, supervisord + nginx on Render | No container runtime anywhere; one command starts the stack |
+| Runtime | Native Python processes — `scripts/dev.ps1` / `scripts/dev.sh` locally; on Render one process (10 services + a pure-Python edge proxy) under supervisord | No container runtime anywhere; one command starts the stack |
 | Frontend hosting | Vite dev server on `:3000` locally; Vercel (Root Directory `frontend`) when deployed | Static SPA, no server to run |
 | CI | GitHub Actions | Frontend build + Python compileall + pytest |
 
@@ -268,10 +268,10 @@ count differs (§18.1).
 ├── deploy/render/                # hosted backend, native Python runtime (no Dockerfile)
 │   ├── README.md                 # Render Blueprint + Vercel deploy guide
 │   ├── start.sh                  # bootstrap: wait-for-DB/Redis → migrate+seed → render
-│   │                             #   nginx + supervisor configs → exec supervisord
-│   ├── supervisord.conf.template # backend (1 process, 10 servers) + nginx → .render/
+│   │                             #   supervisor config → exec supervisord
+│   ├── edge_proxy.py             # public edge on $PORT: /api/*, /ws, /health (replaces nginx)
+│   ├── supervisord.conf.template # backend: 1 process, 10 services + edge → .render/
 │   ├── serve_all.py              # runs all ten services on one event loop (~231 MB)
-│   └── nginx.conf.template       # public edge on $PORT: /api/*, /ws, /health
 ├── mock-data/                   # fixtures used by migrate_and_seed.py
 │   ├── assets.json              # 12 assets
 │   ├── vulnerabilities.json     # 15 vulnerabilities
@@ -720,8 +720,8 @@ Real SPA routes (`frontend/src/App.tsx` + `frontend/src/config/roles.ts`). Role 
 | Vite dev (`vite.config.ts`) | `/api` → `http://localhost:8080`, `/ws` → `http://localhost:8086` (ws:true) |
 | Vercel (build-time env) | `VITE_API_BASE_URL=https://<backend>.onrender.com/api` (the `/api` suffix is **required**), `VITE_WS_URL=wss://<backend>.onrender.com/ws` |
 
-`frontend/vercel.json` already carries the SPA rewrite; the backend's own nginx
-edge (`deploy/render/nginx.conf.template`) does the same `/api` + `/ws` fan-out
+`frontend/vercel.json` already carries the SPA rewrite; the backend's own edge
+(`deploy/render/edge_proxy.py`) does the same `/api` + `/ws` fan-out
 on Render.
 
 ---
@@ -787,7 +787,7 @@ Useful flags: `-NoFrontend` (backend only) and `-SkipInstall` on `scripts/dev.ps
 
 ### 18.2 Hosted deployment (Render + Vercel)
 
-The same code deploys with **no image build anywhere**: the Render Blueprint uses `runtime: python` and one **free** web service that runs all ten services as one Python process (`deploy/render/serve_all.py`, ~231 MB) under supervisord behind nginx, while the frontend is a static Vite build on Vercel.
+The same code deploys with **no image build anywhere**: the Render Blueprint uses `runtime: python` and one **free** web service that runs all ten services as one Python process (`deploy/render/serve_all.py`, ~250 MB) behind a pure-Python edge proxy on `$PORT`, while the frontend is a static Vite build on Vercel.
 
 ```bash
 # Render Dashboard → New + → Blueprint → select this repository.

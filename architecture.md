@@ -924,7 +924,7 @@ It IS claimed because:
 | Technology | Purpose |
 |------------|---------|
 | Python 3.11+ (native processes) | Backend runtime — locally ten uvicorn processes; on Render one process with ten servers (~231 MB). No container runtime |
-| nginx + supervisord | Public edge + process supervision on the Render host |
+| Python edge proxy + supervisord | Public edge (`deploy/render/edge_proxy.py`) + process supervision on the Render host. nginx was removed because Render's native runtime has a read-only `/var/lib/apt` |
 | Render (native Python runtime) | Hosting (single web service, managed Postgres + Key Value) |
 | Vercel | Static frontend hosting (Vite build, Root Directory `frontend`) |
 | PostgreSQL | Database (local instance, NeonDB or Render managed) |

@@ -20,18 +20,31 @@ Render web service**:
 
 | Phase | What Render runs |
 |---|---|
-| **build** | `apt-get install nginx supervisor curl`, then `pip install -r requirements.txt` and `pip install ./services/common` |
-| **start** | `bash deploy/render/start.sh` — normalise `DATABASE_URL` for TLS → wait for Postgres → wait for Redis → `database/migrate_and_seed.py` → render `nginx.conf` + `supervisord.conf` from their templates → `exec supervisord` |
+| **build** | `pip install --prefer-binary -r requirements.txt` and `pip install ./services/common`. **No `apt-get`** — see below. |
+| **start** | `bash deploy/render/start.sh` — normalise `DATABASE_URL` for TLS → wait for Postgres → wait for Redis → `database/migrate_and_seed.py` → render `supervisord.conf` from its template → check `edge_proxy` imports → `exec supervisord` |
+
+> **Two Render constraints shape this config.**
+>
+> 1. **`/var/lib/apt` is read-only** on the *native* runtime, so
+>    `apt-get install nginx` fails the build with
+>    `Acquire (30: Read-only file system)`. nginx was therefore replaced by
+>    `deploy/render/edge_proxy.py`, a pure-Python ASGI edge. `supervisor` comes
+>    from pip (it is in `requirements.txt`), so nothing needs a system package.
+> 2. **The default Python is 3.14**, which has **no wheels** for
+>    `pydantic-core`, `SQLAlchemy` or `psycopg2-binary`, so pip falls back to
+>    compiling from source and the deploy fails. `PYTHON_VERSION` is pinned to
+>    `3.12.11` in `render.yaml`.
 
 ### Why one Python process, not ten
 
-supervisord starts **two** programs: `backend` and `nginx`.
+supervisord starts **one** program: `backend`.
 
-The backend program is `deploy/render/serve_all.py`, which imports all ten
-services and runs **ten uvicorn servers on a single shared event loop**. Each
-service keeps its own port (8081–8092, gateway on 18080) and its own ASGI app, so
-every route and every inter-service HTTP URL is byte-for-byte what it was before —
-only the process topology changed.
+That program is `deploy/render/serve_all.py`, which imports all ten services and
+runs **ten uvicorn servers on a single shared event loop**, plus an eleventh
+server for the edge proxy on `$PORT`. Each service keeps its own port
+(8081–8092, gateway on 18080) and its own ASGI app, so every route and every
+inter-service HTTP URL is byte-for-byte what it was before — only the process
+topology changed.
 
 That consolidation is what makes the **free** plan viable. Measured on this
 repository:
@@ -39,13 +52,13 @@ repository:
 | Topology | Resident memory |
 |---|---|
 | 10 separate processes | ~1.0–1.4 GB |
-| 1 process, 10 servers (`serve_all.py`) | **~231 MB** |
+| 1 process, 10 services + edge (`serve_all.py`) | **~250 MB** |
 
 Ten processes each pay for their own interpreter and their own copy of
 numpy/pandas/scipy/scikit-learn/xgboost/ortools; that duplication, not your data,
-was the entire problem. The Free plan's 512 MB now fits with ~280 MB to spare.
+was the entire problem. The Free plan's 512 MB now fits with ~260 MB to spare.
 
-**nginx is the single public entry point** on `$PORT` and routes `/api/*` to the
+**`edge_proxy.py` is the single public entry point** on `$PORT`. It routes `/api/*` to the
 gateway, `/ws` to the STOMP WebSocket broker and `/health` to the gateway — so the
 browser only ever needs one URL.
 
@@ -125,13 +138,18 @@ Steps:
 ### Build / start commands (for the manual path)
 
 ```
-apt-get update
-  && apt-get install -y --no-install-recommends nginx supervisor curl
-  && rm -rf /var/lib/apt/lists/*
-  && pip install --upgrade pip
-  && pip install -r requirements.txt
+pip install --upgrade pip
+  && pip install --prefer-binary -r requirements.txt
   && pip install ./services/common
 ```
+
+No `apt-get`: Render's native runtime has a read-only `/var/lib/apt`. Do **not**
+add `PYTHON_VERSION`-independent system packages here — `supervisor` is already
+a pip dependency, and the public edge is `deploy/render/edge_proxy.py` rather
+than nginx.
+
+Set `PYTHON_VERSION=3.12.11` in the environment. Render's default (3.14) has no
+wheels for `pydantic-core`, `SQLAlchemy` or `psycopg2-binary`.
 ```
 bash deploy/render/start.sh
 ```
@@ -237,10 +255,17 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke_sacro.ps1 `
 - **Endpoints feel slow / `/api/risk/forecast` times out** — this is CPU, not
   memory. Free gives 0.1 CPU shared by all ten services. Raise the simulation
   count guard or upgrade to `0.5c-512mb`.
-- **`start.sh` fails with "nginx not found" / "supervisord not found"** — the
-  build command did not run the `apt-get install`. `start.sh` resolves both
-  binaries from `PATH` (or `/usr/sbin/nginx`, `/usr/bin/supervisord`) and aborts
-  early with a readable message rather than a silent restart loop.
+- **`start.sh` fails with "supervisord not found"** — the build's `pip install`
+  step did not complete. `supervisor` comes from **pip** (`requirements.txt`),
+  not apt, so there is no `apt-get` to re-run. `start.sh` resolves the binary
+  from `PATH` and aborts early with a readable message rather than a silent
+  restart loop.
+- **Build fails with `Acquire (30: Read-only file system)`** — an `apt-get` has
+  crept back into `buildCommand`. Render's native runtime has a read-only
+  `/var/lib/apt`, so the build must be pip-only.
+- **Build fails compiling `pydantic-core` / `SQLAlchemy` / `psycopg2-binary`
+  from source** — `PYTHON_VERSION` is not pinned to `3.12.11`. Render's default
+  3.14 has no wheels for those three.
 - **`start.sh` fails with "python environment is incomplete"** — the build's
   `pip install` step did not complete; the traceback above it names the missing
   import.
@@ -260,13 +285,14 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke_sacro.ps1 `
 ## 5. What was added for this deployment
 
 ```
-render.yaml                       # Render Blueprint (Postgres + Redis + native-Python web service)
+render.yaml                       # Render Blueprint (Key Value + native-Python web service, plan: free)
 requirements.txt                  # union of every backend dependency (what Render pip-installs)
 deploy/render/
 ├── README.md                     # this document
-├── start.sh                      # wait-for-DB/Redis → migrate+seed → render configs → exec supervisord
-├── supervisord.conf.template     # backend (1 process, 10 servers) + nginx (rendered to .render/)
-└── nginx.conf.template           # public edge on $PORT: /api/*, /ws, /health
+├── start.sh                      # wait-for-DB/Redis → migrate+seed → render config → exec supervisord
+├── serve_all.py                  # 10 services as 10 uvicorn servers on one event loop
+├── edge_proxy.py                 # public edge on $PORT: /api/*, /ws, /health (replaces nginx)
+└── supervisord.conf.template     # the single backend program (rendered to .render/)
 ```
 
 No application code or API routes were changed.

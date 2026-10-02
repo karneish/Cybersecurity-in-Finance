@@ -6,15 +6,15 @@
 # foreground as PID 1's child — `exec supervisord` at the end is what keeps the
 # service alive and lets Render route $PORT and poll /health.
 #
-#  1. Resolve the repo root, the Python interpreter and the nginx/supervisord
+#  1. Resolve the repo root, the Python interpreter and the supervisord
 #     binaries from the live host (Render's native runtime has no fixed paths
 #     like the old container image did).
 #  2. Normalise DATABASE_URL (Render Postgres requires TLS).
 #  3. Wait for PostgreSQL (Render may still be provisioning it on first deploy).
 #  4. Wait for Redis (non-fatal — services reconnect with backoff).
 #  5. Run migrations + seed (idempotent, safe on every boot).
-#  6. Render nginx + supervisord configs into a runtime directory.
-#  7. Validate the generated nginx config, then exec supervisord.
+#  6. Render the supervisord config into a runtime directory and check the
+#     edge proxy imports, then exec supervisord.
 #
 set -euo pipefail
 
@@ -37,18 +37,15 @@ export PYTHONUNBUFFERED=1
 PYTHON_BIN="$(command -v python3 || command -v python || true)"
 [ -n "${PYTHON_BIN}" ] || fatal "no python interpreter on PATH"
 
-NGINX_BIN="$(command -v nginx || echo /usr/sbin/nginx)"
-SUPERVISORD_BIN="$(command -v supervisord || echo /usr/bin/supervisord)"
+SUPERVISORD_BIN="$(command -v supervisord || echo /usr/local/bin/supervisord)"
 
-[ -x "${NGINX_BIN}" ] || fatal "nginx not found (expected 'nginx' or /usr/sbin/nginx); is it installed by render.yaml buildCommand?"
-[ -x "${SUPERVISORD_BIN}" ] || fatal "supervisord not found (expected 'supervisord' or /usr/bin/supervisord); is it installed by render.yaml buildCommand?"
+[ -x "${SUPERVISORD_BIN}" ] || fatal "supervisord not found (expected 'supervisord' on PATH); is it installed by render.yaml buildCommand?"
 
 mkdir -p "${RUNTIME_DIR}"
 
 log "repo root   : ${REPO_ROOT}"
 log "runtime dir : ${RUNTIME_DIR}"
 log "python      : ${PYTHON_BIN}"
-log "nginx       : ${NGINX_BIN}"
 log "supervisord : ${SUPERVISORD_BIN}"
 log "public port : ${PORT}"
 
@@ -136,24 +133,21 @@ PY
 log "running database migrations + seed"
 "${PYTHON_BIN}" database/migrate_and_seed.py
 
-# ── 6. Render nginx + supervisord configs ──
-log "generating nginx + supervisord configs"
-sed -e "s|__PORT__|${PORT}|g" \
-    -e "s|__RUNTIME__|${RUNTIME_DIR}|g" \
-    "${REPO_ROOT}/deploy/render/nginx.conf.template" > "${RUNTIME_DIR}/nginx.conf"
-
+# ── 6. Render the supervisord config ──
+# No nginx config is generated any more: the public edge is
+# deploy/render/edge_proxy.py, running inside serve_all.py. Render's native
+# runtime has a read-only /var/lib/apt, so nginx could not be installed.
+log "generating supervisord config"
 sed -e "s|__REPO__|${REPO_ROOT}|g" \
     -e "s|__RUNTIME__|${RUNTIME_DIR}|g" \
     -e "s|__PYTHON__|${PYTHON_BIN}|g" \
-    -e "s|__NGINX__|${NGINX_BIN}|g" \
     "${REPO_ROOT}/deploy/render/supervisord.conf.template" > "${RUNTIME_DIR}/supervisord.conf"
 
-# ── 7. Validate nginx config before handing over to supervisord, so a typo
-#      surfaces here with a readable message instead of a restart loop ──
-if ! "${NGINX_BIN}" -t -c "${RUNTIME_DIR}/nginx.conf" 2>&1 | sed 's/^/[render] nginx: /'; then
-  fatal "generated nginx config is invalid"
-fi
+# Fail fast if the edge proxy cannot even be imported, rather than letting
+# supervisord restart-loop with the traceback buried in the log.
+"${PYTHON_BIN}" -c "import sys; sys.path.insert(0, '${REPO_ROOT}/deploy/render'); import edge_proxy" \
+  || fatal "deploy/render/edge_proxy.py could not be imported (see traceback above)"
 
-# ── 8. Start everything (foreground) ──
+# ── 7. Start everything (foreground) ──
 log "starting supervisord"
 exec "${SUPERVISORD_BIN}" -c "${RUNTIME_DIR}/supervisord.conf"

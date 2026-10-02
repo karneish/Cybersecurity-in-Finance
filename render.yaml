@@ -8,18 +8,18 @@
 #   VITE_API_BASE_URL = https://cyberrisk-backend.onrender.com/api
 #   VITE_WS_URL       = wss://cyberrisk-backend.onrender.com/ws
 #
-#   https://<host>/api/*   → nginx → api-gateway    (JWT/rate-limit/routing)
-#   https://<host>/ws      → nginx → notification   (STOMP 1.2 WebSocket)
-#   https://<host>/health  → nginx → api-gateway    (Render health check)
+#   https://<host>/api/*   → edge proxy → api-gateway    (JWT/rate-limit/routing)
+#   https://<host>/ws      → edge proxy → notification   (STOMP 1.2 WebSocket)
+#   https://<host>/health  → edge proxy → api-gateway    (Render health check)
 #
 # How it runs without Docker:
-#   buildCommand  apt-get installs nginx + supervisor, pip installs the
-#                 dependency union in requirements.txt and the local
-#                 `cybercommon` package from ./services/common.
+#   buildCommand  pip installs the dependency union in requirements.txt and the
+#                 local `cybercommon` package from ./services/common. No apt-get:
+#                 Render native runtimes have a read-only /var/lib/apt.
 #   startCommand  deploy/render/start.sh — normalises DATABASE_URL for TLS,
 #                 waits for PostgreSQL and Redis, runs migrations + seed, then
-#                 execs supervisord, which starts the backend (all ten services
-#                 in one process, see below) and nginx (the public edge on $PORT).
+#                 execs supervisord, which starts the backend: all ten services
+#                 plus the public edge proxy, in one process on $PORT.
 #
 # No `databases:` block on purpose. Render's free Postgres expires 30 days after
 # creation and cannot be downgraded afterwards, which would take the demo offline
@@ -74,13 +74,15 @@ services:
     region: oregon
     rootDir: .
 
-    # nginx = public edge proxy on $PORT; the backend program runs all ten
+    # One Python process: the ten services plus the public edge proxy on $PORT.
+    # No apt-get: Render's *native* runtime has a read-only /var/lib/apt, so
+    # `apt-get install nginx` fails the build with "Acquire (30: Read-only file
+    # system". The public edge is deploy/render/edge_proxy.py instead, which runs
+    # inside the same Python process as the services. supervisor comes from pip
+    # (see requirements.txt), so nothing needs a system package.
     buildCommand: >-
-      apt-get update
-      && apt-get install -y --no-install-recommends nginx supervisor curl
-      && rm -rf /var/lib/apt/lists/*
-      && pip install --upgrade pip
-      && pip install -r requirements.txt
+      pip install --upgrade pip
+      && pip install --prefer-binary -r requirements.txt
       && pip install ./services/common
 
     startCommand: bash deploy/render/start.sh
@@ -101,6 +103,13 @@ services:
     numInstances: 1
 
     envVars:
+      # Pin the interpreter. Render's default was Python 3.14.3, which has no
+      # wheels for pydantic-core, SQLAlchemy or psycopg2-binary, so pip fell
+      # back to building them from source and the deploy failed. 3.12 has
+      # wheels for every pinned package.
+      - key: PYTHON_VERSION
+        value: "3.12.11"
+
       # Managed Key Value, wired automatically by Render.
       - key: REDIS_URL
         fromService:
