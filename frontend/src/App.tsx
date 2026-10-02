@@ -6,6 +6,7 @@ import { useWebSocket, type WSMessage } from '@/hooks/useWebSocket'
 import { hasAccess, getDefaultRoute, PAGE_ACCESS } from '@/config/roles'
 import MainLayout from '@/components/layout/MainLayout'
 import Toaster from '@/components/common/Toaster'
+import LandingPage from '@/pages/LandingPage'
 import LoginPage from '@/pages/LoginPage'
 import ExecutiveDashboard from '@/pages/ExecutiveDashboard'
 import SecurityDashboard from '@/pages/SecurityDashboard'
@@ -35,6 +36,12 @@ function handleLiveMessage(msg: WSMessage) {
   }
 }
 
+function LandingRoute() {
+  const { isAuthenticated, user } = useAuthStore()
+  if (isAuthenticated) return <Navigate to={getDefaultRoute(user?.role)} replace />
+  return <LandingPage />
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuthStore()
   if (loading) {
@@ -44,7 +51,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
       </div>
     )
   }
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (!isAuthenticated) return <Navigate to="/welcome" replace />
   return <>{children}</>
 }
 
@@ -83,6 +90,7 @@ function AppContent() {
     <>
       <Toaster />
       <Routes>
+        <Route path="/welcome" element={<LandingRoute />} />
         <Route path="/login" element={<LoginPage />} />
         <Route
           path="/"

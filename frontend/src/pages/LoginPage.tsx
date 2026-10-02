@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { getDefaultRoute } from "@/config/roles";
-import { Eye, EyeOff, Landmark, Shield, LineChart, Target, BadgeCheck } from "lucide-react";
+import { Eye, EyeOff, Landmark, Shield, LineChart, Target, BadgeCheck, ChevronRight } from "lucide-react";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 
 const inputClass =
@@ -290,15 +290,23 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <div className="mt-8 flex items-center justify-center gap-1.5 border-t border-border-subtle pt-5">
+<div className="mt-8 flex items-center justify-center gap-1.5 border-t border-border-subtle pt-5">
               <span className="h-1.5 w-1.5 rounded-full bg-status-live" />
               <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-text-tertiary">
                 System Operational
               </span>
             </div>
           </div>
+
+          <Link
+            to="/welcome"
+            className="mt-5 inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-text-tertiary transition-colors hover:text-text-secondary"
+          >
+            <ChevronRight className="h-3 w-3 rotate-180" />
+            Back to platform overview
+          </Link>
         </div>
       </div>
     </div>
-  );
+  )
 }
